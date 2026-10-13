@@ -1,0 +1,61 @@
+# One term per line. Starter list: extend with your own drug and symptom names.
+fever
+bukhar
+cough
+khansi
+cold
+sardi
+headache
+sar dard
+vomiting
+ulti
+nausea
+diarrhoea
+loose motion
+chest pain
+breathlessness
+saans phoolna
+sore throat
+body ache
+weakness
+kamzori
+diabetes
+sugar
+blood pressure
+hypertension
+thyroid
+asthma
+paracetamol
+crocin
+dolo
+ibuprofen
+azithromycin
+amoxicillin
+cetirizine
+pantoprazole
+omeprazole
+metformin
+amlodipine
+atorvastatin
+telmisartan
+insulin
+ORS
+syrup
+tablet
+capsule
+injection
+twice a day
+thrice a day
+after food
+before food
+empty stomach
+milligram
+mg
+blood test
+X-ray
+ECG
+CBC
+HbA1c
+temperature
+pulse
+SpO2

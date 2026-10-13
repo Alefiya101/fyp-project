@@ -1,0 +1,17 @@
+# Core (needed for the data path)
+datasets
+soundfile
+scipy
+numpy
+pandas
+pyarrow
+regex
+tqdm
+num2words
+jiwer
+indic-transliteration      # only used with --script-policy roman
+
+# Optional models (CPU)
+openai-whisper             # Whisper ASR (--no-asr to skip)
+torch                      # install the CPU build: pip install torch --index-url https://download.pytorch.org/whl/cpu
+pyannote.audio             # speaker embeddings (--no-embeddings to skip); needs HF_TOKEN
