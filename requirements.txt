@@ -14,4 +14,15 @@ indic-transliteration      # only used with --script-policy roman
 # Optional models (CPU)
 openai-whisper             # Whisper ASR (--no-asr to skip)
 torch                      # install the CPU build: pip install torch --index-url https://download.pytorch.org/whl/cpu
-pyannote.audio             # speaker embeddings (--no-embeddings to skip); needs HF_TOKEN
+pyannote.audio             # speaker embeddings / diarization (needs HF_TOKEN)
+
+# Speech service — preprocessing, ASR inference, fine-tuning, optimisation
+noisereduce>=2.0.1         # spectral-gating noise reduction (preprocessing/denoise.py)
+faster-whisper>=1.0.0      # CTranslate2-backed Whisper inference (asr/baseline_eval.py, speech_service.py)
+ctranslate2>=4.0.0         # INT8 model conversion and runtime (asr/optimise.py)
+transformers>=4.40.0       # WhisperForConditionalGeneration + Seq2SeqTrainer (asr/finetune.py)
+accelerate>=0.29.0         # CPU training backend for HuggingFace Trainer
+
+# Testing
+hypothesis>=6.100.0        # property-based tests (speech_service/tests/)
+pytest>=8.0.0
