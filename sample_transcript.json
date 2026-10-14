@@ -1,0 +1,48 @@
+{
+  "session_id": "S001",
+  "language_mix": "hi-en",
+  "segments": [
+    {
+      "start": 0.0,
+      "end": 3.5,
+      "speaker": "doctor",
+      "text": "Aapko kab se bukhar hai?",
+      "lang": "hi-en"
+    },
+    {
+      "start": 3.6,
+      "end": 8.2,
+      "speaker": "patient",
+      "text": "Teen din se bukhar hai aur badan me dard hai. Khansi bilkul nahi hai.",
+      "lang": "hi-en"
+    },
+    {
+      "start": 8.5,
+      "end": 12.0,
+      "speaker": "doctor",
+      "text": "Temperature 101.4 F hai. Pulse 88 hai.",
+      "lang": "hi-en"
+    },
+    {
+      "start": 12.2,
+      "end": 15.0,
+      "speaker": "doctor",
+      "text": "Yeh viral fever lag raha hai.",
+      "lang": "hi-en"
+    },
+    {
+      "start": 15.2,
+      "end": 20.0,
+      "speaker": "doctor",
+      "text": "Aap Paracetamol 650 mg TDS lijiye 3 din tak khana khane ke baad.",
+      "lang": "hi-en"
+    },
+    {
+      "start": 20.2,
+      "end": 24.0,
+      "speaker": "doctor",
+      "text": "Agar aaram na mile to Complete Blood Count (CBC) test karwa lena.",
+      "lang": "hi-en"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "service_name": "clinical_nlp_and_fhir",
+  "version": "1.0.0",
+  "extractor": {
+    "backend": "rule_based",
+    "model_name_or_path": null,
+    "temperature": 0.1,
+    "max_context_tokens": 4096
+  },
+  "terminology": {
+    "use_local_cache": true,
+    "fuzzy_matching": true,
+    "snomed_enabled": true,
+    "loinc_enabled": true,
+    "rxnorm_enabled": true
+  },
+  "grounding": {
+    "strict_mode": false,
+    "check_doses": true,
+    "check_durations": true,
+    "check_vitals": true,
+    "check_negation": true
+  },
+  "fhir": {
+    "profile": "https://nrces.in/ndhm/fhir/r4/StructureDefinition/OPConsultRecord",
+    "default_practitioner": "Dr. Consulting Physician",
+    "validate_bundle": true
+  }
+}

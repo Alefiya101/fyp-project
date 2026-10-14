@@ -1,0 +1,106 @@
+{
+  "$defs": {
+    "TranscriptSegment": {
+      "properties": {
+        "segment_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional unique integer index for the segment (0-based or 1-based).",
+          "title": "Segment Id"
+        },
+        "start": {
+          "description": "Start timestamp in seconds.",
+          "minimum": 0.0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "description": "End timestamp in seconds.",
+          "minimum": 0.0,
+          "title": "End",
+          "type": "number"
+        },
+        "speaker": {
+          "description": "Speaker role assigned by diarization and role heuristic.",
+          "enum": [
+            "doctor",
+            "patient",
+            "attendant",
+            "unknown"
+          ],
+          "title": "Speaker",
+          "type": "string"
+        },
+        "text": {
+          "description": "Transcribed utterance text.",
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "lang": {
+          "default": "hi-en",
+          "description": "Language tag, e.g. 'hi-en', 'hi', 'en', 'en-IN'.",
+          "title": "Lang",
+          "type": "string"
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ASR transcription confidence score.",
+          "title": "Confidence"
+        }
+      },
+      "required": [
+        "start",
+        "end",
+        "speaker",
+        "text"
+      ],
+      "title": "TranscriptSegment",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "session_id": {
+      "description": "Unique session/encounter identifier.",
+      "minLength": 1,
+      "title": "Session Id",
+      "type": "string"
+    },
+    "language_mix": {
+      "default": "hi-en",
+      "description": "Overall session language mix (e.g. 'hi-en', 'hi', 'en').",
+      "title": "Language Mix",
+      "type": "string"
+    },
+    "segments": {
+      "description": "Chronological list of transcript segments.",
+      "items": {
+        "$ref": "#/$defs/TranscriptSegment"
+      },
+      "title": "Segments",
+      "type": "array"
+    }
+  },
+  "required": [
+    "session_id"
+  ],
+  "title": "Transcript",
+  "type": "object"
+}

@@ -1,0 +1,344 @@
+{
+  "$defs": {
+    "ClinicalEntities": {
+      "properties": {
+        "symptoms": {
+          "items": {
+            "$ref": "#/$defs/SymptomEntity"
+          },
+          "title": "Symptoms",
+          "type": "array"
+        },
+        "diagnosis": {
+          "items": {
+            "$ref": "#/$defs/DiagnosisEntity"
+          },
+          "title": "Diagnosis",
+          "type": "array"
+        },
+        "medications": {
+          "items": {
+            "$ref": "#/$defs/MedicationEntity"
+          },
+          "title": "Medications",
+          "type": "array"
+        },
+        "vitals": {
+          "items": {
+            "$ref": "#/$defs/VitalEntity"
+          },
+          "title": "Vitals",
+          "type": "array"
+        },
+        "investigations": {
+          "items": {
+            "$ref": "#/$defs/InvestigationEntity"
+          },
+          "title": "Investigations",
+          "type": "array"
+        }
+      },
+      "title": "ClinicalEntities",
+      "type": "object"
+    },
+    "DiagnosisEntity": {
+      "properties": {
+        "text": {
+          "description": "Diagnosed clinical condition or provisional impression.",
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "confidence": {
+          "default": "medium",
+          "description": "Clinical confidence level expressed by doctor.",
+          "enum": [
+            "high",
+            "medium",
+            "low",
+            "provisional",
+            "differential"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "status": {
+          "default": "provisional",
+          "description": "Clinical status of the condition.",
+          "enum": [
+            "active",
+            "provisional",
+            "resolved",
+            "recurrence"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "source_segments": {
+          "description": "Transcript segment indices supporting this diagnosis.",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Source Segments",
+          "type": "array"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "DiagnosisEntity",
+      "type": "object"
+    },
+    "InvestigationEntity": {
+      "properties": {
+        "name": {
+          "description": "Diagnostic test or lab investigation ordered/discussed.",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "status": {
+          "default": "ordered",
+          "description": "Status of the diagnostic investigation.",
+          "enum": [
+            "ordered",
+            "reviewed",
+            "recommended",
+            "completed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Reported test result if discussed during consultation.",
+          "title": "Result"
+        },
+        "source_segments": {
+          "description": "Transcript segment indices where investigation was ordered or discussed.",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Source Segments",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "InvestigationEntity",
+      "type": "object"
+    },
+    "MedicationEntity": {
+      "properties": {
+        "name": {
+          "description": "Medication brand or generic name.",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "dose": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Dose amount with unit (e.g. '500 mg', '650 mg', '1 tablet', '2 puffs').",
+          "title": "Dose"
+        },
+        "frequency": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Administration frequency (e.g. 'OD', 'BD', 'TDS', 'QID', 'twice a day', 'SOS').",
+          "title": "Frequency"
+        },
+        "duration": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Prescribed duration (e.g. '3 days', '5 days', '1 month', 'continuous').",
+          "title": "Duration"
+        },
+        "status": {
+          "default": "new",
+          "description": "Whether this is a newly prescribed medication or ongoing/existing home medication.",
+          "enum": [
+            "new",
+            "existing",
+            "discontinued",
+            "modified"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "instructions": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Specific timing instructions (e.g. 'after food', 'before food', 'at bedtime').",
+          "title": "Instructions"
+        },
+        "source_segments": {
+          "description": "Transcript segment indices where medication was mentioned.",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Source Segments",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "MedicationEntity",
+      "type": "object"
+    },
+    "SymptomEntity": {
+      "properties": {
+        "text": {
+          "description": "Symptom name or clinical complaint.",
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "duration": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Duration of the symptom (e.g. '3 days', '1 week', '2 months').",
+          "title": "Duration"
+        },
+        "severity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Reported severity (e.g. 'mild', 'moderate', 'severe', 'high-grade').",
+          "title": "Severity"
+        },
+        "negated": {
+          "default": false,
+          "description": "True if symptom is explicitly ruled out (e.g. 'no cough', 'chhati me dard nahi hai').",
+          "title": "Negated",
+          "type": "boolean"
+        },
+        "source_segments": {
+          "description": "List of transcript segment indices that justify this extraction.",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Source Segments",
+          "type": "array"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "SymptomEntity",
+      "type": "object"
+    },
+    "VitalEntity": {
+      "properties": {
+        "type": {
+          "description": "Type of vital sign: 'temperature', 'pulse', 'blood_pressure_sys', 'blood_pressure_dia', 'spo2', 'respiratory_rate', 'weight'.",
+          "title": "Type",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Recorded numerical or string value (e.g. 38.5, 98.6, 120, 80).",
+          "title": "Value"
+        },
+        "unit": {
+          "description": "Unit of measurement (e.g. 'Cel', 'degF', 'mm[Hg]', '/min', '%', 'kg').",
+          "title": "Unit",
+          "type": "string"
+        },
+        "source_segments": {
+          "description": "Transcript segment indices where vital sign was recorded.",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Source Segments",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "value",
+        "unit"
+      ],
+      "title": "VitalEntity",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "session_id": {
+      "description": "Associated session identifier.",
+      "minLength": 1,
+      "title": "Session Id",
+      "type": "string"
+    },
+    "entities": {
+      "$ref": "#/$defs/ClinicalEntities",
+      "description": "Extracted structured clinical entities."
+    }
+  },
+  "required": [
+    "session_id"
+  ],
+  "title": "ClinicalExtraction",
+  "type": "object"
+}

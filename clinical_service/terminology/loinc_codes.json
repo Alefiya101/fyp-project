@@ -1,0 +1,23 @@
+{
+  "temperature": {"code": "8310-5", "display": "Body temperature", "system": "http://loinc.org", "default_unit": "Cel"},
+  "body_temperature": {"code": "8310-5", "display": "Body temperature", "system": "http://loinc.org", "default_unit": "Cel"},
+  "pulse": {"code": "8867-4", "display": "Heart rate", "system": "http://loinc.org", "default_unit": "/min"},
+  "heart_rate": {"code": "8867-4", "display": "Heart rate", "system": "http://loinc.org", "default_unit": "/min"},
+  "blood_pressure": {"code": "85354-9", "display": "Blood pressure panel with all children optional", "system": "http://loinc.org", "default_unit": "mm[Hg]"},
+  "blood_pressure_sys": {"code": "8480-6", "display": "Systolic blood pressure", "system": "http://loinc.org", "default_unit": "mm[Hg]"},
+  "systolic": {"code": "8480-6", "display": "Systolic blood pressure", "system": "http://loinc.org", "default_unit": "mm[Hg]"},
+  "blood_pressure_dia": {"code": "8462-4", "display": "Diastolic blood pressure", "system": "http://loinc.org", "default_unit": "mm[Hg]"},
+  "diastolic": {"code": "8462-4", "display": "Diastolic blood pressure", "system": "http://loinc.org", "default_unit": "mm[Hg]"},
+  "spo2": {"code": "2708-6", "display": "Oxygen saturation in Arterial blood", "system": "http://loinc.org", "default_unit": "%"},
+  "oxygen_saturation": {"code": "2708-6", "display": "Oxygen saturation in Arterial blood", "system": "http://loinc.org", "default_unit": "%"},
+  "respiratory_rate": {"code": "9279-1", "display": "Respiratory rate", "system": "http://loinc.org", "default_unit": "/min"},
+  "weight": {"code": "29463-7", "display": "Body weight", "system": "http://loinc.org", "default_unit": "kg"},
+  "cbc": {"code": "58410-2", "display": "Complete blood count (hemogram) panel - Blood by Automated count", "system": "http://loinc.org", "default_unit": ""},
+  "complete blood count": {"code": "58410-2", "display": "Complete blood count (hemogram) panel - Blood by Automated count", "system": "http://loinc.org", "default_unit": ""},
+  "hba1c": {"code": "4548-4", "display": "Hemoglobin A1c/Hemoglobin.total in Blood", "system": "http://loinc.org", "default_unit": "%"},
+  "blood sugar fasting": {"code": "1558-6", "display": "Fasting glucose [Mass/volume] in Serum or Plasma", "system": "http://loinc.org", "default_unit": "mg/dL"},
+  "fasting blood sugar": {"code": "1558-6", "display": "Fasting glucose [Mass/volume] in Serum or Plasma", "system": "http://loinc.org", "default_unit": "mg/dL"},
+  "ecg": {"code": "11524-6", "display": "EKG study", "system": "http://loinc.org", "default_unit": ""},
+  "x-ray": {"code": "36643-5", "display": "Chest X-ray PA view", "system": "http://loinc.org", "default_unit": ""},
+  "chest x-ray": {"code": "36643-5", "display": "Chest X-ray PA view", "system": "http://loinc.org", "default_unit": ""}
+}

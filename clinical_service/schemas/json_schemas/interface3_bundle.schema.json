@@ -1,0 +1,114 @@
+{
+  "$defs": {
+    "GroundingFlag": {
+      "properties": {
+        "entity": {
+          "description": "Path or identifier of the extracted entity (e.g. 'medications[0]', 'vitals[1]').",
+          "title": "Entity",
+          "type": "string"
+        },
+        "issue": {
+          "description": "Explanation of the grounding violation or hallucination detected.",
+          "title": "Issue",
+          "type": "string"
+        },
+        "severity": {
+          "default": "warning",
+          "description": "Severity of the flag ('warning', 'error', 'info').",
+          "title": "Severity",
+          "type": "string"
+        },
+        "offending_value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The specific value that failed verification (e.g. '650 mg').",
+          "title": "Offending Value"
+        },
+        "source_segments": {
+          "description": "Referenced segment indices checked during validation.",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Source Segments",
+          "type": "array"
+        }
+      },
+      "required": [
+        "entity",
+        "issue"
+      ],
+      "title": "GroundingFlag",
+      "type": "object"
+    },
+    "ValidationResult": {
+      "properties": {
+        "schema_valid": {
+          "description": "True if the FHIR bundle strictly conforms to FHIR R4 and ABDM profile.",
+          "title": "Schema Valid",
+          "type": "boolean"
+        },
+        "errors": {
+          "description": "List of schema validation errors or rule violations if any.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Errors",
+          "type": "array"
+        },
+        "warnings": {
+          "description": "Non-fatal warnings or recommendations.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_valid"
+      ],
+      "title": "ValidationResult",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "session_id": {
+      "description": "Associated session identifier.",
+      "minLength": 1,
+      "title": "Session Id",
+      "type": "string"
+    },
+    "fhir_bundle": {
+      "additionalProperties": true,
+      "description": "The generated FHIR R4 document bundle adhering to ABDM OPConsultRecord profile.",
+      "title": "Fhir Bundle",
+      "type": "object"
+    },
+    "validation": {
+      "$ref": "#/$defs/ValidationResult",
+      "description": "Outcome of the FHIR schema and profile validation."
+    },
+    "grounding_flags": {
+      "description": "Hallucination detection and transcript-grounding warning flags.",
+      "items": {
+        "$ref": "#/$defs/GroundingFlag"
+      },
+      "title": "Grounding Flags",
+      "type": "array"
+    }
+  },
+  "required": [
+    "session_id",
+    "fhir_bundle",
+    "validation"
+  ],
+  "title": "ValidatedBundle",
+  "type": "object"
+}

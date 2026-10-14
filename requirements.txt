@@ -15,3 +15,8 @@ indic-transliteration      # only used with --script-policy roman
 openai-whisper             # Whisper ASR (--no-asr to skip)
 torch                      # install the CPU build: pip install torch --index-url https://download.pytorch.org/whl/cpu
 pyannote.audio             # speaker embeddings (--no-embeddings to skip); needs HF_TOKEN
+
+# Person B: Clinical NLP & FHIR
+pydantic>=2.7.0
+fhir.resources>=8.3.0
+pytest>=8.0.0

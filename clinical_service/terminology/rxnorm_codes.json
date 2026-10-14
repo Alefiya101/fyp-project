@@ -1,0 +1,21 @@
+{
+  "paracetamol": {"code": "7052", "display": "Acetaminophen", "system": "http://www.nlm.nih.gov/research/umls/rxnorm"},
+  "crocin": {"code": "7052", "display": "Acetaminophen (Crocin)", "system": "http://www.nlm.nih.gov/research/umls/rxnorm"},
+  "dolo": {"code": "7052", "display": "Acetaminophen (Dolo)", "system": "http://www.nlm.nih.gov/research/umls/rxnorm"},
+  "dolo 650": {"code": "7052", "display": "Acetaminophen 650 MG", "system": "http://www.nlm.nih.gov/research/umls/rxnorm"},
+  "ibuprofen": {"code": "5640", "display": "Ibuprofen", "system": "http://www.nlm.nih.gov/research/umls/rxnorm"},
+  "azithromycin": {"code": "18631", "display": "Azithromycin", "system": "http://www.nlm.nih.gov/research/umls/rxnorm"},
+  "amoxicillin": {"code": "723", "display": "Amoxicillin", "system": "http://www.nlm.nih.gov/research/umls/rxnorm"},
+  "cetirizine": {"code": "20610", "display": "Cetirizine", "system": "http://www.nlm.nih.gov/research/umls/rxnorm"},
+  "pantoprazole": {"code": "40790", "display": "Pantoprazole", "system": "http://www.nlm.nih.gov/research/umls/rxnorm"},
+  "pan 40": {"code": "40790", "display": "Pantoprazole (Pan 40)", "system": "http://www.nlm.nih.gov/research/umls/rxnorm"},
+  "omeprazole": {"code": "7646", "display": "Omeprazole", "system": "http://www.nlm.nih.gov/research/umls/rxnorm"},
+  "metformin": {"code": "6809", "display": "Metformin", "system": "http://www.nlm.nih.gov/research/umls/rxnorm"},
+  "amlodipine": {"code": "17767", "display": "Amlodipine", "system": "http://www.nlm.nih.gov/research/umls/rxnorm"},
+  "atorvastatin": {"code": "83367", "display": "Atorvastatin", "system": "http://www.nlm.nih.gov/research/umls/rxnorm"},
+  "telmisartan": {"code": "74880", "display": "Telmisartan", "system": "http://www.nlm.nih.gov/research/umls/rxnorm"},
+  "insulin": {"code": "5856", "display": "Insulin", "system": "http://www.nlm.nih.gov/research/umls/rxnorm"},
+  "ors": {"code": "12467", "display": "Oral rehydration solution", "system": "http://www.nlm.nih.gov/research/umls/rxnorm"},
+  "salbutamol": {"code": "435", "display": "Albuterol", "system": "http://www.nlm.nih.gov/research/umls/rxnorm"},
+  "cough syrup": {"code": "310325", "display": "Dextromethorphan syrup", "system": "http://www.nlm.nih.gov/research/umls/rxnorm"}
+}
