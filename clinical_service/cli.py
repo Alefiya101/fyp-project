@@ -26,14 +26,24 @@ from clinical_service.schemas.interface1_transcript import Transcript
 from clinical_service.service import ClinicalService
 
 
-def evaluate_benchmark(benchmark_path: Path, max_samples: int = 50) -> None:
+def evaluate_benchmark(benchmark_path: Path, max_samples: int = 50, split: str = "test") -> None:
     """Evaluates extraction accuracy, medication metrics, and schema validity %."""
     if not benchmark_path.is_file():
         sys.exit(f"[ERROR] Benchmark file not found: {benchmark_path}")
 
-    data: list[dict[str, Any]] = json.loads(benchmark_path.read_text(encoding="utf-8"))[:max_samples]
+    raw_data: Any = json.loads(benchmark_path.read_text(encoding="utf-8"))
+    if isinstance(raw_data, dict) and "dialogues" in raw_data:
+        dialogues = raw_data["dialogues"]
+        if split and split != "all":
+            dialogues = [d for d in dialogues if d.get("metadata", {}).get("split") == split]
+    elif isinstance(raw_data, list):
+        dialogues = raw_data
+    else:
+        sys.exit("[ERROR] Unrecognized benchmark format.")
+
+    data: list[dict[str, Any]] = dialogues[:max_samples]
     print("\n=======================================================")
-    print(f"  RUNNING BENCHMARK EVALUATION ({len(data)} Simulated Dialogues)")
+    print(f"  RUNNING BENCHMARK EVALUATION ({len(data)} Dialogues, Split: {split})")
     print("=======================================================\n")
 
     service = ClinicalService()
@@ -55,18 +65,26 @@ def evaluate_benchmark(benchmark_path: Path, max_samples: int = 50) -> None:
     total_grounding_flags = 0
 
     for idx, item in enumerate(data):
-        transcript = Transcript(
-            session_id=item["session_id"],
-            language_mix=item.get("language_mix", "hi-en"),
-            segments=item["segments"],
-        )
-        gold = item.get("gold_extraction", {})
+        if "transcript" in item:
+            transcript = Transcript.model_validate(item["transcript"])
+            gold = item.get("extraction", {}).get("entities", {})
+        else:
+            transcript = Transcript(
+                session_id=item["session_id"],
+                language_mix=item.get("language_mix", "hi-en"),
+                segments=item["segments"],
+            )
+            gold = item.get("gold_extraction", {})
 
         result = service.process_transcript(transcript)
         pred_entities = service.extract_entities_only(transcript).entities
 
         # 1. Symptoms
-        gold_syms = {s["text"].lower() for s in gold.get("symptoms", []) if not s.get("negated", False)}
+        gold_syms = {
+            s["text"].lower()
+            for s in gold.get("symptoms", [])
+            if s.get("present", True) and not s.get("negated", False)
+        }
         pred_syms = {s.text.lower() for s in pred_entities.symptoms if not s.negated}
         total_gold_symptoms += len(gold_syms)
         total_pred_symptoms += len(pred_syms)
@@ -132,7 +150,25 @@ def main() -> None:
     parser.add_argument("--output", "-o", type=str, help="Path to write output Interface 3 Validated Bundle JSON")
     parser.add_argument("--export-schemas", type=str, help="Export JSON Schemas to given folder")
     parser.add_argument("--evaluate", action="store_true", help="Run benchmark evaluation on simulated dialogues")
-    parser.add_argument("--benchmark-file", type=str, default="clinical_service/data/simulated_dialogues.json", help="Path to benchmark JSON")
+    parser.add_argument(
+        "--benchmark-file",
+        type=str,
+        default="clinical_service/data/dataset_b_synthetic.json",
+        help="Path to benchmark JSON (defaults to dataset_b_synthetic.json)",
+    )
+    parser.add_argument(
+        "--split",
+        type=str,
+        default="test",
+        choices=["test", "val", "train", "all"],
+        help="Dataset split to evaluate (test, val, train, all)",
+    )
+    parser.add_argument(
+        "--export-lora",
+        type=str,
+        metavar="SPLIT",
+        help="Export Dataset B to LoRA training JSONL for given split (e.g. train, val)",
+    )
     parser.add_argument("--max-samples", type=int, default=50, help="Max samples to evaluate")
     parser.add_argument("--strict-grounding", action="store_true", help="Enable strict grounding checks")
 
@@ -143,8 +179,19 @@ def main() -> None:
         print(f"[INFO] Exported JSON Schemas to {args.export_schemas}")
         return
 
+    if args.export_lora:
+        from clinical_service.data.dialogue_corpus import export_lora_dataset
+
+        out_p = export_lora_dataset(split=args.export_lora)
+        print(f"[INFO] Exported LoRA instruction dataset ({args.export_lora}) to {out_p}")
+        return
+
     if args.evaluate:
-        evaluate_benchmark(Path(args.benchmark_file), max_samples=args.max_samples)
+        evaluate_benchmark(
+            Path(args.benchmark_file),
+            max_samples=args.max_samples,
+            split=args.split,
+        )
         return
 
     if not args.input:

@@ -337,3 +337,64 @@ def save_simulated_corpus(path: Path | None = None, count: int = 200) -> Path:
     corpus = generate_extended_dialogue_corpus(target_count=count)
     out_path.write_text(json.dumps(corpus, indent=2, ensure_ascii=False), encoding="utf-8")
     return out_path
+
+
+def load_dataset_b(split: str | None = None) -> list[dict[str, Any]]:
+    """Loads synthetic Hinglish OPD dialogues (Dataset B).
+
+    Args:
+        split: Optional filter ('train', 'val', 'test'). None returns all 216 dialogues.
+    """
+    path = DATA_DIR / "dataset_b_synthetic.json"
+    if not path.is_file():
+        alt_path = DATA_DIR.parents[2] / "dataset_b_synthetic.json"
+        if alt_path.is_file():
+            path = alt_path
+        else:
+            raise FileNotFoundError(f"dataset_b_synthetic.json not found at {path}")
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    dialogues: list[dict[str, Any]] = data.get("dialogues", [])
+    if split:
+        dialogues = [d for d in dialogues if d.get("metadata", {}).get("split") == split]
+    return dialogues
+
+
+def export_lora_dataset(
+    output_path: str | Path | None = None,
+    split: str = "train",
+) -> Path:
+    """Exports Dataset B dialogues into JSONL format for LoRA/PEFT fine-tuning.
+
+    Formats each example as an instruction-tuned conversation:
+    - system: Role and task prompt
+    - user: Full Hinglish transcript
+    - assistant: Clean Interface 2 ClinicalExtraction JSON
+    """
+    from clinical_service.schemas.interface1_transcript import Transcript
+
+    out_file = Path(output_path) if output_path else (DATA_DIR / f"lora_{split}_dataset.jsonl")
+    dialogues = load_dataset_b(split=split)
+
+    lines: list[str] = []
+    for item in dialogues:
+        t = Transcript.model_validate(item["transcript"])
+        system_prompt = (
+            "You are an ambient clinical scribe for Indian OPD consultations. "
+            "Extract all symptoms, diagnoses, medications, vitals, and investigations "
+            "from the consultation into structured JSON with source segment citations."
+        )
+        user_prompt = f"Consultation Transcript (Session {t.session_id}):\n{t.full_text()}"
+        assistant_output = json.dumps(item["extraction"], ensure_ascii=False)
+
+        chat_sample = {
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+                {"role": "assistant", "content": assistant_output},
+            ]
+        }
+        lines.append(json.dumps(chat_sample, ensure_ascii=False))
+
+    out_file.write_text("\n".join(lines), encoding="utf-8")
+    return out_file

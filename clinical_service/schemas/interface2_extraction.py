@@ -7,9 +7,9 @@ and also consumed by Person C (Application) for UI review and highlighting.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class SymptomEntity(BaseModel):
@@ -26,10 +26,21 @@ class SymptomEntity(BaseModel):
         default=False,
         description="True if symptom is explicitly ruled out (e.g. 'no cough', 'chhati me dard nahi hai')."
     )
+    present: bool | None = Field(
+        default=None,
+        description="Dataset B alias for negation status (present=False means negated=True)."
+    )
     source_segments: list[int] = Field(
         default_factory=list,
         description="List of transcript segment indices that justify this extraction."
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_negation(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "present" in data and "negated" not in data:
+            data["negated"] = not bool(data["present"])
+        return data
 
 
 class DiagnosisEntity(BaseModel):
@@ -38,7 +49,7 @@ class DiagnosisEntity(BaseModel):
         default="medium",
         description="Clinical confidence level expressed by doctor."
     )
-    status: Literal["active", "provisional", "resolved", "recurrence"] = Field(
+    status: Literal["active", "provisional", "resolved", "recurrence", "new", "existing"] = Field(
         default="provisional",
         description="Clinical status of the condition."
     )
@@ -62,13 +73,17 @@ class MedicationEntity(BaseModel):
         default=None,
         description="Prescribed duration (e.g. '3 days', '5 days', '1 month', 'continuous')."
     )
-    status: Literal["new", "existing", "discontinued", "modified"] = Field(
+    status: Literal["new", "existing", "discontinued", "modified", "changed", "self_taken"] = Field(
         default="new",
         description="Whether this is a newly prescribed medication or ongoing/existing home medication."
     )
     instructions: str | None = Field(
         default=None,
         description="Specific timing instructions (e.g. 'after food', 'before food', 'at bedtime')."
+    )
+    generic: str | None = Field(
+        default=None,
+        description="Generic chemical name if available."
     )
     source_segments: list[int] = Field(
         default_factory=list,
@@ -89,6 +104,10 @@ class VitalEntity(BaseModel):
         ...,
         description="Unit of measurement (e.g. 'Cel', 'degF', 'mm[Hg]', '/min', '%', 'kg')."
     )
+    source: str | None = Field(
+        default=None,
+        description="Optional source attribution (e.g. 'patient_reported', 'clinic_measured')."
+    )
     source_segments: list[int] = Field(
         default_factory=list,
         description="Transcript segment indices where vital sign was recorded."
@@ -96,8 +115,9 @@ class VitalEntity(BaseModel):
 
 
 class InvestigationEntity(BaseModel):
-    name: str = Field(..., min_length=1, description="Diagnostic test or lab investigation ordered/discussed.")
-    status: Literal["ordered", "reviewed", "recommended", "completed"] = Field(
+    name: str = Field(default="", description="Diagnostic test or lab investigation ordered/discussed.")
+    text: str | None = Field(default=None, description="Synonym for name in some datasets.")
+    status: Literal["ordered", "reviewed", "recommended", "completed", "advised"] = Field(
         default="ordered",
         description="Status of the diagnostic investigation."
     )
@@ -110,6 +130,16 @@ class InvestigationEntity(BaseModel):
         description="Transcript segment indices where investigation was ordered or discussed."
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_investigation(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "text" in data and not data.get("name"):
+                data["name"] = data["text"]
+            if data.get("status") == "advised":
+                data["status"] = "recommended"
+        return data
+
 
 class ClinicalEntities(BaseModel):
     symptoms: list[SymptomEntity] = Field(default_factory=list)
@@ -117,6 +147,9 @@ class ClinicalEntities(BaseModel):
     medications: list[MedicationEntity] = Field(default_factory=list)
     vitals: list[VitalEntity] = Field(default_factory=list)
     investigations: list[InvestigationEntity] = Field(default_factory=list)
+    demographics: dict[str, Any] | None = Field(default=None, description="Patient demographics if present.")
+    follow_up: dict[str, Any] | None = Field(default=None, description="Follow-up advice if present.")
+    advice: list[dict[str, Any]] | None = Field(default=None, description="Lifestyle advice if present.")
 
 
 class ClinicalExtraction(BaseModel):
