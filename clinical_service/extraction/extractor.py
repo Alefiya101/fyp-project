@@ -75,8 +75,10 @@ class RuleBasedSLMExtractor(BaseExtractor):
         self.symptom_keywords = [
             ("fever", ["fever", "bukhar", "pyrexia", "tap"]),
             ("cough", ["cough", "khansi"]),
+            ("productive cough", ["productive cough", "balgam wali khansi", "wet cough", "phlegm"]),
             ("cold", ["cold", "sardi", "jukham"]),
-            ("headache", ["headache", "sar dard", "sar me dard"]),
+            ("runny nose", ["runny nose", "naak behna", "rhinorrhea", "watery nasal"]),
+            ("headache", ["headache", "sar dard", "sar me dard", "sir dard"]),
             ("vomiting", ["vomiting", "ulti"]),
             ("nausea", ["nausea", "ji ghabrana", "mitli"]),
             ("loose motion", ["loose motion", "diarrhea", "diarrhoea", "dast"]),
@@ -85,7 +87,11 @@ class RuleBasedSLMExtractor(BaseExtractor):
             ("sore throat", ["sore throat", "gale me dard", "gale me kharash"]),
             ("body ache", ["body ache", "badan dard", "badan me dard"]),
             ("weakness", ["weakness", "kamzori", "kamjori", "thakan", "fatigue"]),
+            ("loss of appetite", ["loss of appetite", "bhookh kam", "bhookh nahi", "anorexia", "appetite"]),
+            ("chills", ["chills", "thandi", "kapkapi", "shivering"]),
+            ("burning urination", ["burning urination", "peshab me jalan", "dysuria"]),
             ("acidity", ["acidity", "jalan", "pet me jalan", "gas"]),
+            ("joint pain", ["joint pain", "jodon me dard", "arthralgia"]),
         ]
 
         # Common diagnosis keywords
@@ -122,6 +128,7 @@ class RuleBasedSLMExtractor(BaseExtractor):
             seg_idx = seg.segment_id if seg.segment_id is not None else i
             text = seg.text
             lower_text = text.lower()
+            speaker = seg.speaker.lower() if seg.speaker else ""
 
             # 1. Symptoms Extraction
             for sym_std, patterns in self.symptom_keywords:
@@ -130,6 +137,10 @@ class RuleBasedSLMExtractor(BaseExtractor):
                     if m:
                         span = m.span()
                         neg = is_negated(lower_text, span)
+                        if not neg and speaker == "doctor" and i + 1 < len(segments):
+                            next_text = segments[i + 1].text.lower()
+                            if is_negated(next_text) or re.search(r"\b(?:nahi|no|na|woh sab nahi|kuch nahi)\b", next_text):
+                                neg = True
                         dur = extract_duration(text)
 
                         sev = None
