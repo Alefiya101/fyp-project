@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """speech_service.py
 
 Top-level orchestrator: audio file → Interface 1 Transcript JSON.
@@ -32,14 +31,18 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
-from dataclasses import dataclass, field
+from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Generator, Iterator, List, Optional, Union
 
 import numpy as np
 
 from speech_service.diarization.diarize import DiarizationSegment, diarize
-from speech_service.preprocessing.denoise import AudioLoadError, denoise, load_audio, resample_to_16k
+from speech_service.preprocessing.denoise import (
+    denoise,
+    load_audio,
+    resample_to_16k,
+)
 from speech_service.preprocessing.vad import SpeechSegment, get_speech_segments
 
 logger = logging.getLogger(__name__)
@@ -77,8 +80,8 @@ class SpeechService:
         compute_type: str = "int8",
         device: str = "cpu",
         num_speakers: int = 2,
-        vad_threshold: float = 0.5,
-        lexicon_path: Optional[str] = None,
+        vad_threshold: float = 0.6,
+        lexicon_path: str | None = None,
     ) -> None:
         self._model_size = model_size
         self._compute_type = compute_type
@@ -92,16 +95,71 @@ class SpeechService:
     # Model management
     # ------------------------------------------------------------------
 
+    def _resolve_model_path(self) -> str:
+        """Auto-detects Person A's fine-tuned model checkpoints if available."""
+        # 1. If explicit path passed that exists on disk
+        if Path(self._model_size).exists():
+            return self._model_size
+
+        # 2. Check standard Person A CTranslate2 model paths
+        base_dir = Path(__file__).resolve().parent
+        repo_dir = base_dir.parent
+        check_dirs = [
+            base_dir / "models" / "ct2_stage2",
+            repo_dir / "speech_service" / "models" / "ct2_stage2",
+            base_dir / "models" / "ct2_stage1",
+            repo_dir / "speech_service" / "models" / "ct2_stage1",
+            base_dir / "models" / "stage2",
+            repo_dir / "speech_service" / "models" / "stage2",
+            base_dir / "models" / "stage1",
+            repo_dir / "speech_service" / "models" / "stage1",
+        ]
+        for d in check_dirs:
+            if d.is_dir() and (d / "model.bin").is_file():
+                logger.info("Auto-detected Person A's fine-tuned model checkpoint at '%s'", d)
+                print(f"[INFO] Auto-detected Person A fine-tuned Whisper model at: {d}")
+                return str(d)
+
+        return self._model_size
+
+    def _get_initial_prompt(self) -> str | None:
+        """Loads terms from medical_lexicon.txt to bias Whisper ASR toward clinical OPD terms."""
+        lex_path = self._lexicon_path
+        if not lex_path:
+            candidates = [
+                Path("data/medical_lexicon.txt"),
+                Path(__file__).resolve().parent.parent / "data" / "medical_lexicon.txt",
+            ]
+            for c in candidates:
+                if c.is_file():
+                    lex_path = str(c)
+                    break
+
+        if lex_path and Path(lex_path).is_file():
+            try:
+                lines = Path(lex_path).read_text(encoding="utf-8").splitlines()
+                terms = [ln.strip() for ln in lines if ln.strip() and not ln.startswith("#")]
+                if terms:
+                    return (
+                        "Doctor-patient OPD consultation in Hindi and English. "
+                        "Medical keywords: " + ", ".join(terms[:60])
+                    )
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Failed to read medical lexicon at '%s': %s", lex_path, e)
+
+        return "Doctor-patient OPD clinical consultation in Hindi and English. Symptoms, vitals, prescriptions."
+
     def _get_model(self):
         """Load the ASR model on first access."""
         if self._asr_model is None:
-            from faster_whisper import WhisperModel  # noqa: PLC0415
+            from faster_whisper import WhisperModel
+            resolved_model = self._resolve_model_path()
             logger.info(
                 "Loading faster-whisper model '%s' (%s, %s)…",
-                self._model_size, self._device, self._compute_type,
+                resolved_model, self._device, self._compute_type,
             )
             self._asr_model = WhisperModel(
-                self._model_size,
+                resolved_model,
                 device=self._device,
                 compute_type=self._compute_type,
             )
@@ -119,7 +177,7 @@ class SpeechService:
         return wav
 
     @staticmethod
-    def _identify_person_a(segments: List[TranscriptSegment]) -> str:
+    def _identify_person_a(segments: list[TranscriptSegment]) -> str:
         """Return the speaker label with the most turns (proxy for doctor)."""
         if not segments:
             return ""
@@ -130,12 +188,12 @@ class SpeechService:
     def _detect_lang(text: str) -> str:
         """Heuristic: detect language tag from script content."""
         try:
-            import regex  # noqa: PLC0415
+            import regex
             has_deva = bool(regex.search(r"\p{Devanagari}", text))
         except ImportError:
             has_deva = any("\u0900" <= ch <= "\u097F" for ch in text)
 
-        import re  # noqa: PLC0415
+        import re
         has_latin = bool(re.search(r"[A-Za-z]", text))
         if has_deva and has_latin:
             return "hi-en"
@@ -145,9 +203,9 @@ class SpeechService:
 
     def _assign_diarization(
         self,
-        vad_segments: List[SpeechSegment],
-        dia_segments: List[DiarizationSegment],
-    ) -> List[dict]:
+        vad_segments: list[SpeechSegment],
+        dia_segments: list[DiarizationSegment],
+    ) -> list[dict]:
         """Map each VAD segment to a speaker from the diarization output."""
         assigned = []
         for vseg in vad_segments:
@@ -165,11 +223,11 @@ class SpeechService:
         return assigned
 
     def _transcribe_segments(
-        self, wav: np.ndarray, segments: List[dict]
-    ) -> List[TranscriptSegment]:
+        self, wav: np.ndarray, segments: list[dict]
+    ) -> list[TranscriptSegment]:
         """Run ASR on each VAD segment and return TranscriptSegment list."""
         model = self._get_model()
-        results: List[TranscriptSegment] = []
+        results: list[TranscriptSegment] = []
 
         for seg in segments:
             start_s, end_s = seg["start"], seg["end"]
@@ -187,8 +245,16 @@ class SpeechService:
 
             # Pass numpy array directly — avoids soundfile metadata_errors
             # incompatibility when passing a file path to faster-whisper
+            initial_prompt = self._get_initial_prompt()
             try:
-                asr_segs, _ = model.transcribe(chunk, beam_size=1, language=None)
+                asr_segs, _ = model.transcribe(
+                    chunk,
+                    beam_size=1,
+                    language=None,
+                    initial_prompt=initial_prompt,
+                    condition_on_previous_text=False,
+                    repetition_penalty=1.2,
+                )
                 text_parts = []
                 confidences = []
                 for a in asr_segs:
@@ -197,7 +263,7 @@ class SpeechService:
                         confidences.append(float(np.exp(a.avg_logprob)))
                 text = " ".join(text_parts).strip()
                 confidence = float(np.mean(confidences)) if confidences else 1.0
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.warning("ASR failed for segment [%.2f, %.2f]: %s", start_s, end_s, exc)
                 text, confidence = "", 0.0
 
@@ -217,7 +283,7 @@ class SpeechService:
     def process(
         self,
         path: str,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
         person_a_only: bool = False,
     ) -> dict:
         """Full pipeline: audio file → Interface 1 Transcript JSON dict.
@@ -277,7 +343,7 @@ class SpeechService:
     def transcribe_stream(
         self,
         path: str,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
     ) -> Iterator[dict]:
         """Yield Interface 1 segment dicts one at a time.
 
@@ -330,7 +396,7 @@ def _segment_to_dict(ts: TranscriptSegment) -> dict:
     }
 
 
-def _build_transcript_json(session_id: str, segments: List[TranscriptSegment]) -> dict:
+def _build_transcript_json(session_id: str, segments: list[TranscriptSegment]) -> dict:
     seg_dicts = [_segment_to_dict(s) for s in segments]
 
     if seg_dicts:
@@ -350,7 +416,7 @@ def _build_transcript_json(session_id: str, segments: List[TranscriptSegment]) -
 # Module-level convenience functions (lazy singleton)
 # ---------------------------------------------------------------------------
 
-_default_service: Optional[SpeechService] = None
+_default_service: SpeechService | None = None
 
 
 def _get_default_service() -> SpeechService:
@@ -381,7 +447,8 @@ def transcribe_stream(audio_path: str, session_id: str) -> Iterator[dict]:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    import argparse, json, sys  # noqa: E401
+    import argparse
+    import json
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     ap = argparse.ArgumentParser(description="Run the full speech pipeline on a WAV file")

@@ -46,17 +46,27 @@ class ClinicalService:
         # 1. Parse and validate Interface 1 input
         if isinstance(transcript_input, Transcript):
             transcript = transcript_input
-        elif isinstance(transcript_input, (str, Path)):
-            p = Path(transcript_input)
-            if p.is_file():
-                raw_data = json.loads(p.read_text(encoding="utf-8"))
-            else:
-                raw_data = json.loads(str(transcript_input))
-            transcript = Transcript.model_validate(raw_data)
-        elif isinstance(transcript_input, dict):
-            transcript = Transcript.model_validate(transcript_input)
         else:
-            raise TypeError(f"Unsupported transcript input type: {type(transcript_input)}")
+            if isinstance(transcript_input, (str, Path)):
+                p = Path(transcript_input)
+                if p.is_file():
+                    raw_data = json.loads(p.read_text(encoding="utf-8"))
+                else:
+                    raw_data = json.loads(str(transcript_input))
+            elif isinstance(transcript_input, dict):
+                raw_data = transcript_input
+            else:
+                raise TypeError(f"Unsupported transcript input type: {type(transcript_input)}")
+
+            # Filter out silent/empty segments from ASR output
+            if isinstance(raw_data, dict) and "segments" in raw_data:
+                cleaned_segments = [
+                    s for s in raw_data["segments"]
+                    if (s.get("text") if isinstance(s, dict) else getattr(s, "text", "") or "").strip()
+                ]
+                raw_data = {**raw_data, "segments": cleaned_segments}
+
+            transcript = Transcript.model_validate(raw_data)
 
         # 2. Extract Structured Clinical Entities (Interface 2)
         extraction: ClinicalExtraction = self.extractor.extract(transcript)
