@@ -37,3 +37,17 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Speech Service Outputs & Caches
+output*/
+out_*/
+test_out/
+logs*/
+*_logs/
+cache/
+cs_data/
+speech_service/models/
+speech_service/**/__pycache__/
+speech_service/**/*.py[cod]
+speech_service/asr/*_wer*.csv
+speech_service/asr/*_benchmark.json
