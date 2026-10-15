@@ -184,3 +184,47 @@ def test_end_to_end_clinical_service():
     assert med.dose == "650 mg"
     assert med.frequency == "TDS"
     assert med.status == "new"
+
+
+def test_speech_confidence_and_speaker_plausibility_grounding():
+    transcript = Transcript(
+        session_id="S_SPEECH_01",
+        segments=[
+            TranscriptSegment(
+                start=0.0,
+                end=2.0,
+                speaker="patient",
+                text="Main pehle se Rozavel leta hoon.",
+                confidence=0.45,
+                lang="hi-en",
+            ),
+            TranscriptSegment(
+                start=2.1,
+                end=5.0,
+                speaker="doctor",
+                text="Theek hai, check karte hain.",
+                confidence=0.95,
+                lang="hi-en",
+            ),
+        ],
+    )
+
+    extraction = ClinicalExtraction(
+        session_id="S_SPEECH_01",
+        entities=ClinicalEntities(
+            medications=[
+                MedicationEntity(
+                    name="Rozavel",
+                    status="new",
+                    source_segments=[0],
+                )
+            ]
+        ),
+    )
+
+    checker = GroundingChecker()
+    flags = checker.verify(transcript, extraction)
+
+    assert len(flags) >= 2
+    assert any("low-confidence speech turn" in f.issue for f in flags)
+    assert any("patient speech turn without doctor confirmation" in f.issue for f in flags)

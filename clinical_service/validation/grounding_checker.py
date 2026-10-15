@@ -31,8 +31,32 @@ class GroundingChecker:
             (s.segment_id if s.segment_id is not None else idx): s.text
             for idx, s in enumerate(transcript.segments)
         }
+        seg_conf = {
+            (s.segment_id if s.segment_id is not None else idx): (
+                s.confidence if s.confidence is not None else 1.0
+            )
+            for idx, s in enumerate(transcript.segments)
+        }
+        seg_speaker = {
+            (s.segment_id if s.segment_id is not None else idx): (s.speaker or "unknown").lower()
+            for idx, s in enumerate(transcript.segments)
+        }
+
         def get_cited_text(sources: list[int]) -> str:
             return " ".join([seg_dict.get(s, "") for s in sources])
+
+        def check_speech_confidence(entity_tag: str, sources: list[int], offending_val: str) -> None:
+            confs = [seg_conf[s] for s in sources if s in seg_conf]
+            if confs and min(confs) < 0.55:
+                flags.append(
+                    GroundingFlag(
+                        entity=entity_tag,
+                        issue=f"Extracted from low-confidence speech turn (confidence: {min(confs):.2f}). Potential ASR audio artifact.",
+                        severity="warning",
+                        offending_value=offending_val,
+                        source_segments=sources,
+                    )
+                )
 
         # 1. Verify Symptoms
         for idx, sym in enumerate(extraction.entities.symptoms):
@@ -72,6 +96,7 @@ class GroundingChecker:
                         source_segments=sym.source_segments,
                     )
                 )
+            check_speech_confidence(entity_tag, sym.source_segments, sym.text)
 
         # 2. Verify Diagnoses
         for idx, diag in enumerate(extraction.entities.diagnosis):
@@ -86,6 +111,7 @@ class GroundingChecker:
                         source_segments=[],
                     )
                 )
+            check_speech_confidence(entity_tag, diag.source_segments, diag.text)
 
         # 3. Verify Medications
         for idx, med in enumerate(extraction.entities.medications):
@@ -135,6 +161,22 @@ class GroundingChecker:
                         )
                     )
 
+            # Speaker plausibility: verify if a newly prescribed medication was spoken by patient only
+            if med.status == "new" and med.source_segments:
+                speakers = {seg_speaker.get(s, "") for s in med.source_segments if s in seg_speaker}
+                if speakers and "doctor" not in speakers and "patient" in speakers:
+                    flags.append(
+                        GroundingFlag(
+                            entity=entity_tag,
+                            issue="Newly prescribed medication cited exclusively from patient speech turn without doctor confirmation. Verify if this is patient home history.",
+                            severity="warning",
+                            offending_value=med.name,
+                            source_segments=med.source_segments,
+                        )
+                    )
+
+            check_speech_confidence(entity_tag, med.source_segments, med.name)
+
         # 4. Verify Vitals
         for idx, vit in enumerate(extraction.entities.vitals):
             entity_tag = f"vitals[{idx}]"
@@ -167,5 +209,7 @@ class GroundingChecker:
                         source_segments=vit.source_segments,
                     )
                 )
+
+            check_speech_confidence(entity_tag, vit.source_segments, str(vit.value))
 
         return flags

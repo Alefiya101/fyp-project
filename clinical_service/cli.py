@@ -147,6 +147,7 @@ def evaluate_benchmark(benchmark_path: Path, max_samples: int = 50, split: str =
 def main() -> None:
     parser = argparse.ArgumentParser(description="Clinical NLP & FHIR Service (Person B)")
     parser.add_argument("--input", "-i", type=str, help="Path to input Interface 1 Transcript JSON")
+    parser.add_argument("--audio", "-a", type=str, help="Path to input raw audio WAV file for end-to-end scribing")
     parser.add_argument("--output", "-o", type=str, help="Path to write output Interface 3 Validated Bundle JSON")
     parser.add_argument("--export-schemas", type=str, help="Export JSON Schemas to given folder")
     parser.add_argument("--evaluate", action="store_true", help="Run benchmark evaluation on simulated dialogues")
@@ -194,16 +195,21 @@ def main() -> None:
         )
         return
 
-    if not args.input:
+    if args.audio:
+        audio_p = Path(args.audio)
+        if not audio_p.is_file():
+            sys.exit(f"[ERROR] Audio file not found: {audio_p}")
+        service = ClinicalService(strict_grounding=args.strict_grounding)
+        result = service.process_audio(audio_p)
+    elif args.input:
+        in_path = Path(args.input)
+        if not in_path.is_file():
+            sys.exit(f"[ERROR] Input file not found: {in_path}")
+        service = ClinicalService(strict_grounding=args.strict_grounding)
+        result = service.process_transcript(in_path)
+    else:
         parser.print_help()
         sys.exit(0)
-
-    in_path = Path(args.input)
-    if not in_path.is_file():
-        sys.exit(f"[ERROR] Input file not found: {in_path}")
-
-    service = ClinicalService(strict_grounding=args.strict_grounding)
-    result = service.process_transcript(in_path)
 
     out_json = result.model_dump_json(indent=2)
     if args.output:

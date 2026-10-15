@@ -90,3 +90,33 @@ class ClinicalService:
         else:
             transcript = transcript_input
         return self.extractor.extract(transcript)
+
+    def process_audio(
+        self,
+        audio_path: str | Path,
+        session_id: str | None = None,
+        person_a_only: bool = False,
+    ) -> ValidatedBundle:
+        """End-to-end ambient scribing: audio (.wav) -> Interface 1 Transcript -> Interface 3 Validated Bundle.
+
+        Chains Person A's SpeechService (preprocessing, diarization, Whisper ASR)
+        directly with Person B's clinical extraction and ABDM FHIR mapping.
+        """
+        try:
+            import importlib
+
+            speech_mod = importlib.import_module("speech_service.speech_service")
+            speech_cls = speech_mod.SpeechService
+        except (ImportError, AttributeError) as exc:
+            raise ImportError(
+                "speech_service and its audio dependencies (soundfile, faster-whisper) "
+                "are required to process raw audio files directly. Install them from requirements.txt."
+            ) from exc
+
+        speech_svc = speech_cls()
+        transcript_dict = speech_svc.process(
+            str(audio_path),
+            session_id=session_id,
+            person_a_only=person_a_only,
+        )
+        return self.process_transcript(transcript_dict)
