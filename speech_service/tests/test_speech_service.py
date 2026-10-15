@@ -9,9 +9,9 @@ All heavy models (ASR, VAD, diarizer) are mocked — no network or GPU required.
 
 from __future__ import annotations
 
-import math
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -47,7 +47,6 @@ def _make_service_with_mocks(
     vad_return=None,
     dia_return=None,
     asr_text="hello world",
-    asr_confidence=0.9,
 ) -> SpeechService:
     """Build a SpeechService with mocked VAD, diarizer and ASR."""
     svc = SpeechService()
@@ -57,13 +56,16 @@ def _make_service_with_mocks(
     if dia_return is None:
         dia_return = [DiarizationSegment(0.0, 1.0, "doctor")]
 
-    # Mock ASR model
-    asr_seg = MagicMock()
-    asr_seg.text = asr_text
-    asr_seg.avg_logprob = math.log(max(asr_confidence, 1e-9))
+    # Mock Transformers Whisper model and processor
     mock_model = MagicMock()
-    mock_model.transcribe.return_value = ([asr_seg], MagicMock())
+    mock_model.device = "cpu"
+    mock_model.generate.return_value = SimpleNamespace(sequences=object(), scores=())
+    mock_processor = MagicMock()
+    mock_processor.return_value.input_features.to.return_value = object()
+    mock_processor.get_prompt_ids.return_value.to.return_value = object()
+    mock_processor.batch_decode.return_value = [asr_text]
     svc._asr_model = mock_model
+    svc._asr_processor = mock_processor
 
     return svc, vad_return, dia_return
 
@@ -103,10 +105,13 @@ class TestSpeechServiceProcess:
              patch("speech_service.speech_service.diarize", return_value=dia_ret):
             result = svc.process(wav_path, session_id="S001")
 
-        assert svc._asr_model.transcribe.call_args.kwargs == {
-            "beam_size": 1,
-            "language": None,
-        }
+        generation_kwargs = svc._asr_model.generate.call_args.kwargs
+        assert generation_kwargs["num_beams"] == 1
+        assert generation_kwargs["task"] == "transcribe"
+        assert generation_kwargs["language"] is None
+        assert generation_kwargs["return_dict_in_generate"] is True
+        assert generation_kwargs["output_scores"] is True
+        assert "prompt_ids" in generation_kwargs
 
         # Top-level keys
         assert result["session_id"] == "S001"

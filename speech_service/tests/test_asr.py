@@ -25,8 +25,14 @@ import soundfile as sf
 
 from speech_service.asr.baseline_eval import compute_wer, evaluate_dataset
 from speech_service.asr.finetune import load_dataset_from_parquet
+from speech_service.asr.optimise import DEFAULT_MODEL, _parse_args
 
 SR = 16_000
+
+
+def test_transformers_optimizer_defaults_to_shared_stage2_model():
+    args = _parse_args([])
+    assert args.checkpoint_dir == DEFAULT_MODEL
 
 
 # ---------------------------------------------------------------------------

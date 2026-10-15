@@ -83,12 +83,21 @@ print(result.fhir_bundle)               # Full ABDM OPConsultRecord Document Bun
 # Process a single transcript file
 python -m clinical_service.cli --input transcript.json --output validated_bundle.json
 
+# Record from the default microphone, then run ASR, clinical extraction, and FHIR mapping
+python -m speech_service.live_microphone --duration-seconds 30
+
 # Run benchmark evaluation across 50 simulated Hinglish dialogues
 python -m clinical_service.cli --evaluate --max-samples 50
 
 # Export raw JSON schemas for Person A and Person C
 python -m clinical_service.cli --export-schemas clinical_service/schemas/json_schemas
 ```
+
+The microphone command records a fixed-duration WAV, then writes the Interface 1
+transcript to `output/live_transcript.json` and the validated Interface 3 FHIR
+bundle to `output/live_fhir_bundle.json`. It uses the configured/default input
+device; `--device` accepts an input device ID or name. This is record-then-process,
+not incremental transcription while the microphone is recording.
 
 ---
 

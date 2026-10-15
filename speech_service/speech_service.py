@@ -46,6 +46,7 @@ from speech_service.preprocessing.denoise import (
 from speech_service.preprocessing.vad import SpeechSegment, get_speech_segments
 
 logger = logging.getLogger(__name__)
+DEFAULT_WHISPER_MODEL = "alefiya101/whisper-hinglish-clinical-stage2"
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -76,48 +77,54 @@ class SpeechService:
 
     def __init__(
         self,
-        model_size: str = "base",
-        compute_type: str = "int8",
+        model_size: str = DEFAULT_WHISPER_MODEL,
+        compute_type: str = "float32",
         device: str = "cpu",
         num_speakers: int = 2,
         vad_threshold: float = 0.6,
         lexicon_path: str | None = None,
     ) -> None:
         self._model_size = model_size
-        self._compute_type = compute_type
+        if compute_type != "float32":
+            logger.warning(
+                "compute_type=%s is ignored by Transformers inference; "
+                "the model runs at the framework's default precision.",
+                compute_type,
+            )
         self._device = device
         self._num_speakers = num_speakers
         self._vad_threshold = vad_threshold
         self._lexicon_path = lexicon_path
         self._asr_model = None  # lazy
+        self._asr_processor = None
 
     # ------------------------------------------------------------------
     # Model management
     # ------------------------------------------------------------------
 
     def _resolve_model_path(self) -> str:
-        """Auto-detects Person A's fine-tuned model checkpoints if available."""
+        """Resolve a local HF checkpoint first, otherwise use the configured model ID."""
         # 1. If explicit path passed that exists on disk
         if Path(self._model_size).exists():
             return self._model_size
 
-        # 2. Check standard Person A CTranslate2 model paths
+        if self._model_size != DEFAULT_WHISPER_MODEL:
+            return self._model_size
+
+        # 2. Check standard local Hugging Face checkpoint paths
         base_dir = Path(__file__).resolve().parent
-        repo_dir = base_dir.parent
         check_dirs = [
-            base_dir / "models" / "ct2_stage2",
-            repo_dir / "speech_service" / "models" / "ct2_stage2",
-            base_dir / "models" / "ct2_stage1",
-            repo_dir / "speech_service" / "models" / "ct2_stage1",
             base_dir / "models" / "stage2",
-            repo_dir / "speech_service" / "models" / "stage2",
             base_dir / "models" / "stage1",
-            repo_dir / "speech_service" / "models" / "stage1",
         ]
         for d in check_dirs:
-            if d.is_dir() and (d / "model.bin").is_file():
+            has_weights = (
+                any(d.glob("*.safetensors"))
+                or any(d.glob("pytorch_model*.bin"))
+            )
+            if d.is_dir() and (d / "config.json").is_file() and has_weights:
                 logger.info("Auto-detected Person A's fine-tuned model checkpoint at '%s'", d)
-                print(f"[INFO] Auto-detected Person A fine-tuned Whisper model at: {d}")
+                print(f"[INFO] Auto-detected Person A Hugging Face Whisper model at: {d}")
                 return str(d)
 
         return self._model_size
@@ -150,19 +157,20 @@ class SpeechService:
         return "Doctor-patient OPD clinical consultation in Hindi and English. Symptoms, vitals, prescriptions."
 
     def _get_model(self):
-        """Load the ASR model on first access."""
+        """Load the Hugging Face Transformers model and processor on first access."""
         if self._asr_model is None:
-            from faster_whisper import WhisperModel
+            import torch
+            from transformers import WhisperForConditionalGeneration, WhisperProcessor
+
             resolved_model = self._resolve_model_path()
             logger.info(
-                "Loading faster-whisper model '%s' (%s, %s)…",
-                resolved_model, self._device, self._compute_type,
+                "Loading Transformers Whisper model '%s' on %s…",
+                resolved_model, self._device,
             )
-            self._asr_model = WhisperModel(
-                resolved_model,
-                device=self._device,
-                compute_type=self._compute_type,
-            )
+            self._asr_processor = WhisperProcessor.from_pretrained(resolved_model)
+            self._asr_model = WhisperForConditionalGeneration.from_pretrained(resolved_model)
+            self._asr_model.to(torch.device(self._device))
+            self._asr_model.eval()
         return self._asr_model
 
     # ------------------------------------------------------------------
@@ -243,26 +251,39 @@ class SpeechService:
                 ))
                 continue
 
-            # Pass numpy array directly — avoids soundfile metadata_errors
-            # incompatibility when passing a file path to faster-whisper
+            # Feed the 16 kHz waveform directly to the Transformers processor.
             initial_prompt = self._get_initial_prompt()
             try:
-                asr_segs, _ = model.transcribe(
-                    chunk,
-                    beam_size=1,
-                    language=None,
-                    initial_prompt=initial_prompt,
-                    condition_on_previous_text=False,
-                    repetition_penalty=1.2,
-                )
-                text_parts = []
-                confidences = []
-                for a in asr_segs:
-                    text_parts.append(a.text.strip())
-                    if hasattr(a, "avg_logprob"):
-                        confidences.append(float(np.exp(a.avg_logprob)))
-                text = " ".join(text_parts).strip()
-                confidence = float(np.mean(confidences)) if confidences else 1.0
+                import torch
+
+                processor = self._asr_processor
+                if processor is None:
+                    raise RuntimeError("Whisper processor was not initialized with the ASR model.")
+                inputs = processor(chunk, sampling_rate=16_000, return_tensors="pt")
+                input_features = inputs.input_features.to(model.device)
+                generation_kwargs = {
+                    "task": "transcribe",
+                    "language": None,
+                    "num_beams": 1,
+                    "return_dict_in_generate": True,
+                    "output_scores": True,
+                }
+                if initial_prompt:
+                    prompt_ids = processor.get_prompt_ids(initial_prompt, return_tensors="pt")
+                    generation_kwargs["prompt_ids"] = prompt_ids.to(model.device)
+
+                with torch.inference_mode():
+                    output = model.generate(input_features, **generation_kwargs)
+                text = processor.batch_decode(
+                    output.sequences, skip_special_tokens=True
+                )[0].strip()
+                if output.scores:
+                    token_scores = model.compute_transition_scores(
+                        output.sequences, output.scores, normalize_logits=True
+                    )
+                    confidence = float(torch.exp(token_scores[0].mean()).item())
+                else:
+                    confidence = 1.0
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ASR failed for segment [%.2f, %.2f]: %s", start_s, end_s, exc)
                 text, confidence = "", 0.0

@@ -18,9 +18,10 @@ pyannote.audio             # speaker embeddings / diarization (needs HF_TOKEN)
 
 # Person A: Speech service — preprocessing, ASR inference, fine-tuning, optimisation
 noisereduce>=2.0.1         # spectral-gating noise reduction (preprocessing/denoise.py)
-faster-whisper>=1.0.0      # CTranslate2-backed Whisper inference (asr/baseline_eval.py, speech_service.py)
-ctranslate2>=4.0.0         # INT8 model conversion and runtime (asr/optimise.py)
-transformers>=4.40.0       # WhisperForConditionalGeneration + Seq2SeqTrainer (asr/finetune.py)
+sounddevice>=0.4.6         # live microphone recording (speech_service/live_microphone.py)
+faster-whisper>=1.0.0      # CTranslate2-backed baseline evaluation (asr/baseline_eval.py)
+ctranslate2>=4.0.0         # faster-whisper inference runtime
+transformers>=4.40.0       # Whisper inference, checkpoint preparation, and fine-tuning
 accelerate>=0.29.0         # CPU training backend for HuggingFace Trainer
 
 # Person B: Clinical NLP & FHIR

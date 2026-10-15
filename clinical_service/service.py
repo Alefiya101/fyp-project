@@ -119,7 +119,7 @@ class ClinicalService:
             speech_cls = speech_mod.SpeechService
         except (ImportError, AttributeError) as exc:
             raise ImportError(
-                "speech_service and its audio dependencies (soundfile, faster-whisper) "
+                "speech_service and its audio dependencies (soundfile, transformers, torch) "
                 "are required to process raw audio files directly. Install them from requirements.txt."
             ) from exc
 
