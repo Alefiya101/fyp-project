@@ -169,7 +169,10 @@ class SpeechService:
             )
             self._asr_processor = WhisperProcessor.from_pretrained(resolved_model)
             self._asr_model = WhisperForConditionalGeneration.from_pretrained(resolved_model)
-            self._asr_model.to(torch.device(self._device))
+            try:
+                self._asr_model.to(torch.device(self._device))
+            except (RuntimeError, ValueError, NotImplementedError) as e:
+                logger.debug("Device move skipped or already on device: %s", e)
             self._asr_model.eval()
         return self._asr_model
 

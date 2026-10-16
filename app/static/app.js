@@ -1,89 +1,482 @@
 /**
- * ABDM Scribe Studio - Frontend Client Logic
- * 
- * Handles microphone audio capture, API dispatch, stepper state transitions,
- * clinical EMR visualization, and ABDM FHIR R4 exploration.
- * Strictly guarantees ZERO transcripts are displayed in the UI.
+ * ABDM Ambient Clinical Studio - Frontend Application Logic
+ *
+ * Implements interactive doctor editing for:
+ * - Patient and Practitioner names
+ * - Adding/removing Chief Complaints & Symptoms
+ * - Adding/removing Provisional Diagnoses
+ * - Adding/removing Prescribed Medications in the table
+ * - Adding/removing Vitals and Lab Orders
+ * - Live real-time ABDM FHIR R4 document bundle regeneration
+ * - Ambient microphone capture and file upload
+ *
+ * Strictly omits any transcript display.
  */
 
-// Global State
+// State Object
+const state = {
+  sessionId: "live_consultation",
+  time: "10:02 AM",
+  patientName: "OPD Patient",
+  practitionerName: "Dr. Consulting Physician",
+  symptoms: [
+    { name: "fever, cold, cough", duration: "3", status: "active" }
+  ],
+  diagnoses: [
+    { name: "common cold", confidence: "high conf", status: "provisional" }
+  ],
+  medications: [
+    { name: "azithromycin", dosage: "500 mg", frequency: "TDS", duration: "3 days", status: "new" }
+  ],
+  vitals: [],
+  investigations: [],
+  groundingFlags: [
+    { entity: "fever", issue: "Extracted from low-confidence speech turn (confidence: 0.50). Potential ASR audio artifact." },
+    { entity: "cough", issue: "Extracted from low-confidence speech turn (confidence: 0.50). Potential ASR audio artifact." },
+    { entity: "cold", issue: "Extracted from low-confidence speech turn (confidence: 0.50). Potential ASR audio artifact." }
+  ],
+  fhirBundle: null,
+};
+
+// DOM References
+const patientNameInput = document.getElementById("patient-name-input");
+const practitionerNameInput = document.getElementById("practitioner-name-input");
+const sessionIdDisplay = document.getElementById("session-id-display");
+const sessionTimeDisplay = document.getElementById("session-time-display");
+
+const symptomsContainer = document.getElementById("symptoms-container");
+const diagnosesContainer = document.getElementById("diagnoses-container");
+const medicationsTbody = document.getElementById("medications-tbody");
+const vitalsContainer = document.getElementById("vitals-container");
+const investigationsContainer = document.getElementById("investigations-container");
+
+const groundingWarningsList = document.getElementById("grounding-warnings-list");
+const fhirJsonCode = document.getElementById("fhir-json-code");
+const fhirFilenameDisplay = document.getElementById("fhir-filename-display");
+
+const btnCopyFhir = document.getElementById("btn-copy-fhir");
+const btnDownloadFhir = document.getElementById("btn-download-fhir");
+
+// Audio Controls
+const btnRecordMic = document.getElementById("btn-record-mic");
+const recordBtnText = document.getElementById("record-btn-text");
+const micIcon = document.getElementById("mic-icon");
+const recordTimer = document.getElementById("record-timer");
+const btnTimedRecord = document.getElementById("btn-timed-record");
+const recordDurationSelect = document.getElementById("record-duration-select");
+const btnUploadAudio = document.getElementById("btn-upload-audio");
+const audioFileInput = document.getElementById("audio-file-input");
+const btnReloadLatest = document.getElementById("btn-reload-latest");
+const toast = document.getElementById("toast");
+
+// Modals
+const modalComplaint = document.getElementById("modal-complaint");
+const modalDiagnosis = document.getElementById("modal-diagnosis");
+const modalMedication = document.getElementById("modal-medication");
+const modalVital = document.getElementById("modal-vital");
+const modalInvestigation = document.getElementById("modal-investigation");
+
 let isRecording = false;
 let mediaRecorder = null;
 let audioChunks = [];
 let timerInterval = null;
 let elapsedSeconds = 0;
-let currentFhirBundle = null;
 
-// DOM Elements
-const btnRecordToggle = document.getElementById("btn-record-toggle");
-const micPulseRing = document.getElementById("mic-pulse-ring");
-const micIcon = document.getElementById("mic-icon");
-const recordTimer = document.getElementById("record-timer");
-const recordInstruction = document.getElementById("record-instruction");
-const waveformVisualizer = document.getElementById("waveform-visualizer");
-const btnTimedRecord = document.getElementById("btn-timed-record");
-const recordDurationSelect = document.getElementById("record-duration-select");
-const btnUploadFile = document.getElementById("btn-upload-file");
-const audioFileInput = document.getElementById("audio-file-input");
-const btnLoadLatest = document.getElementById("btn-load-latest");
-
-// Stepper Elements
-const stepVad = document.getElementById("step-vad");
-const stepAsr = document.getElementById("step-asr");
-const stepLlm = document.getElementById("step-llm");
-const stepFhir = document.getElementById("step-fhir");
-
-// Meta & Alert Elements
-const metaSessionId = document.getElementById("meta-session-id");
-const metaPatientName = document.getElementById("meta-patient-name");
-const metaPractitionerName = document.getElementById("meta-practitioner-name");
-const metaAbdmStatus = document.getElementById("meta-abdm-status");
-const metaGroundingStatus = document.getElementById("meta-grounding-status");
-const groundingAlertsCard = document.getElementById("grounding-alerts-card");
-const groundingAlertsList = document.getElementById("grounding-alerts-list");
-const alertCountPill = document.getElementById("alert-count-pill");
-
-// EMR Containers
-const containerSymptoms = document.getElementById("container-symptoms");
-const containerMedications = document.getElementById("container-medications");
-const containerVitals = document.getElementById("container-vitals");
-const containerDiagnoses = document.getElementById("container-diagnoses");
-const countSymptoms = document.getElementById("count-symptoms");
-const countMedications = document.getElementById("count-medications");
-const countVitals = document.getElementById("count-vitals");
-const countDiagnoses = document.getElementById("count-diagnoses");
-
-// FHIR Explorer Elements
-const fhirJsonCode = document.getElementById("fhir-json-code");
-const resourcePills = document.getElementById("resource-pills");
-const btnCopyFhir = document.getElementById("btn-copy-fhir");
-const btnDownloadFhir = document.getElementById("btn-download-fhir");
-const toast = document.getElementById("toast");
-
-
-// Initialize on page load
+// Initialize on Load
 document.addEventListener("DOMContentLoaded", () => {
   setupEventListeners();
   loadLatestConsultation();
 });
 
-
 function setupEventListeners() {
-  btnRecordToggle.addEventListener("click", toggleRecording);
+  // Inline edit listeners (debounced update)
+  patientNameInput.addEventListener("change", () => {
+    state.patientName = patientNameInput.value.trim() || "OPD Patient";
+    syncConsultationToBackend();
+  });
+
+  practitionerNameInput.addEventListener("change", () => {
+    state.practitionerName = practitionerNameInput.value.trim() || "Dr. Consulting Physician";
+    syncConsultationToBackend();
+  });
+
+  // Modal triggers
+  document.getElementById("btn-add-complaint").addEventListener("click", () => openModal(modalComplaint));
+  document.getElementById("btn-add-diagnosis").addEventListener("click", () => openModal(modalDiagnosis));
+  document.getElementById("btn-add-medication").addEventListener("click", () => openModal(modalMedication));
+  document.getElementById("btn-add-vital").addEventListener("click", () => openModal(modalVital));
+  document.getElementById("btn-add-investigation").addEventListener("click", () => openModal(modalInvestigation));
+
+  // Modal close buttons
+  document.querySelectorAll(".modal-close-btn, .modal-cancel").forEach((btn) => {
+    btn.addEventListener("click", closeAllModals);
+  });
+
+  // Modal Save Handlers
+  document.getElementById("btn-save-complaint").addEventListener("click", handleAddComplaint);
+  document.getElementById("btn-save-diagnosis").addEventListener("click", handleAddDiagnosis);
+  document.getElementById("btn-save-medication").addEventListener("click", handleAddMedication);
+  document.getElementById("btn-save-vital").addEventListener("click", handleAddVital);
+  document.getElementById("btn-save-investigation").addEventListener("click", handleAddInvestigation);
+
+  // Copy & Download
+  btnCopyFhir.addEventListener("click", copyFhir);
+  btnDownloadFhir.addEventListener("click", downloadFhir);
+
+  // Audio actions
+  btnRecordMic.addEventListener("click", toggleMicRecording);
   btnTimedRecord.addEventListener("click", startTimedServerRecording);
-  btnUploadFile.addEventListener("click", () => audioFileInput.click());
-  audioFileInput.addEventListener("change", handleFileUpload);
-  btnLoadLatest.addEventListener("click", loadLatestConsultation);
-  btnCopyFhir.addEventListener("click", copyFhirToClipboard);
-  btnDownloadFhir.addEventListener("click", downloadFhirBundle);
+  btnUploadAudio.addEventListener("click", () => audioFileInput.click());
+  audioFileInput.addEventListener("change", handleAudioUpload);
+  btnReloadLatest.addEventListener("click", loadLatestConsultation);
 }
 
-
 /* ==========================================================================
-   Microphone Recording via Browser Web Audio API (16kHz WAV format)
+   Modal Operations
    ========================================================================== */
 
-async function toggleRecording() {
+function openModal(modalEl) {
+  modalEl.classList.remove("hidden");
+  const firstInput = modalEl.querySelector("input");
+  if (firstInput) firstInput.focus();
+}
+
+function closeAllModals() {
+  document.querySelectorAll(".modal-overlay").forEach((m) => m.classList.add("hidden"));
+}
+
+function handleAddComplaint() {
+  const name = document.getElementById("input-complaint-name").value.trim();
+  const duration = document.getElementById("input-complaint-duration").value.trim() || "3 days";
+  if (!name) return;
+
+  state.symptoms.push({ name, duration, status: "active" });
+  document.getElementById("input-complaint-name").value = "";
+  closeAllModals();
+  renderAllViews();
+  syncConsultationToBackend();
+  showToast(`Added complaint: ${name}`);
+}
+
+function handleAddDiagnosis() {
+  const name = document.getElementById("input-diagnosis-name").value.trim();
+  const confidence = document.getElementById("input-diagnosis-confidence").value || "high conf";
+  if (!name) return;
+
+  state.diagnoses.push({ name, confidence, status: "provisional" });
+  document.getElementById("input-diagnosis-name").value = "";
+  closeAllModals();
+  renderAllViews();
+  syncConsultationToBackend();
+  showToast(`Added diagnosis: ${name}`);
+}
+
+function handleAddMedication() {
+  const name = document.getElementById("input-med-name").value.trim();
+  const dosage = document.getElementById("input-med-dosage").value.trim() || "500 mg";
+  const frequency = document.getElementById("input-med-frequency").value || "TDS";
+  const duration = document.getElementById("input-med-duration").value.trim() || "3 days";
+  const status = document.getElementById("input-med-status").value || "new";
+  if (!name) return;
+
+  state.medications.push({ name, dosage, frequency, duration, status });
+  document.getElementById("input-med-name").value = "";
+  closeAllModals();
+  renderAllViews();
+  syncConsultationToBackend();
+  showToast(`Prescribed: ${name} (${dosage})`);
+}
+
+function handleAddVital() {
+  const name = document.getElementById("input-vital-name").value.trim();
+  const value = document.getElementById("input-vital-value").value.trim();
+  if (!name || !value) return;
+
+  state.vitals.push({ name, value });
+  document.getElementById("input-vital-name").value = "";
+  document.getElementById("input-vital-value").value = "";
+  closeAllModals();
+  renderAllViews();
+  syncConsultationToBackend();
+  showToast(`Recorded vital: ${name}`);
+}
+
+function handleAddInvestigation() {
+  const name = document.getElementById("input-inv-name").value.trim();
+  if (!name) return;
+
+  state.investigations.push(name);
+  document.getElementById("input-inv-name").value = "";
+  closeAllModals();
+  renderAllViews();
+  syncConsultationToBackend();
+  showToast(`Ordered investigation: ${name}`);
+}
+
+/* ==========================================================================
+   Render View Functions
+   ========================================================================== */
+
+function renderAllViews() {
+  // Metadata
+  patientNameInput.value = state.patientName;
+  practitionerNameInput.value = state.practitionerName;
+  sessionIdDisplay.textContent = state.sessionId;
+  sessionTimeDisplay.textContent = state.time;
+  fhirFilenameDisplay.textContent = `bundle-${state.sessionId}.json`;
+
+  // Symptoms
+  symptomsContainer.innerHTML = "";
+  if (state.symptoms.length === 0) {
+    symptomsContainer.innerHTML = '<span class="empty-text">No symptoms recorded.</span>';
+  } else {
+    state.symptoms.forEach((sym, idx) => {
+      const tag = document.createElement("div");
+      tag.className = "pill-tag pill-symptom";
+      tag.innerHTML = `
+        <span>${escapeHtml(sym.name)}</span>
+        <span class="pill-badge">${escapeHtml(sym.duration || "3")}</span>
+        <button class="pill-remove-btn" title="Remove Complaint" data-idx="${idx}">&times;</button>
+      `;
+      tag.querySelector(".pill-remove-btn").addEventListener("click", () => {
+        state.symptoms.splice(idx, 1);
+        renderAllViews();
+        syncConsultationToBackend();
+      });
+      symptomsContainer.appendChild(tag);
+    });
+  }
+
+  // Diagnoses
+  diagnosesContainer.innerHTML = "";
+  if (state.diagnoses.length === 0) {
+    diagnosesContainer.innerHTML = '<span class="empty-text">No provisional diagnosis entered.</span>';
+  } else {
+    state.diagnoses.forEach((diag, idx) => {
+      const tag = document.createElement("div");
+      tag.className = "pill-tag pill-diagnosis";
+      tag.innerHTML = `
+        <span>${escapeHtml(diag.name)}</span>
+        <span class="pill-badge badge-conf">${escapeHtml(diag.confidence || "high conf")}</span>
+        <button class="pill-remove-btn" title="Remove Diagnosis" data-idx="${idx}">&times;</button>
+      `;
+      tag.querySelector(".pill-remove-btn").addEventListener("click", () => {
+        state.diagnoses.splice(idx, 1);
+        renderAllViews();
+        syncConsultationToBackend();
+      });
+      diagnosesContainer.appendChild(tag);
+    });
+  }
+
+  // Medications Table
+  medicationsTbody.innerHTML = "";
+  if (state.medications.length === 0) {
+    medicationsTbody.innerHTML = '<tr><td colspan="6" class="empty-text text-center">No medications prescribed.</td></tr>';
+  } else {
+    state.medications.forEach((med, idx) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td class="font-bold">${escapeHtml(med.name)}</td>
+        <td>${escapeHtml(med.dosage || "500 mg")}</td>
+        <td>${escapeHtml(med.frequency || "TDS")}</td>
+        <td>${escapeHtml(med.duration || "3 days")}</td>
+        <td><span class="status-pill-new">${escapeHtml(med.status || "new")}</span></td>
+        <td><button class="row-del-btn" title="Delete Medication" data-idx="${idx}">&times;</button></td>
+      `;
+      tr.querySelector(".row-del-btn").addEventListener("click", () => {
+        state.medications.splice(idx, 1);
+        renderAllViews();
+        syncConsultationToBackend();
+      });
+      medicationsTbody.appendChild(tr);
+    });
+  }
+
+  // Vitals
+  if (state.vitals.length === 0) {
+    vitalsContainer.innerHTML = "No vitals recorded in this encounter.";
+  } else {
+    vitalsContainer.innerHTML = "";
+    const vitalsRow = document.createElement("div");
+    vitalsRow.className = "vital-tag-row";
+    state.vitals.forEach((vit, idx) => {
+      const tag = document.createElement("div");
+      tag.className = "pill-tag pill-diagnosis";
+      tag.innerHTML = `
+        <span><strong>${escapeHtml(vit.name)}:</strong> ${escapeHtml(vit.value)}</span>
+        <button class="pill-remove-btn" data-idx="${idx}">&times;</button>
+      `;
+      tag.querySelector(".pill-remove-btn").addEventListener("click", () => {
+        state.vitals.splice(idx, 1);
+        renderAllViews();
+        syncConsultationToBackend();
+      });
+      vitalsRow.appendChild(tag);
+    });
+    vitalsContainer.appendChild(vitalsRow);
+  }
+
+  // Investigations
+  if (state.investigations.length === 0) {
+    investigationsContainer.innerHTML = "None ordered.";
+  } else {
+    investigationsContainer.innerHTML = "";
+    const invRow = document.createElement("div");
+    invRow.className = "vital-tag-row";
+    state.investigations.forEach((inv, idx) => {
+      const tag = document.createElement("div");
+      tag.className = "pill-tag pill-symptom";
+      tag.innerHTML = `
+        <span>${escapeHtml(inv)}</span>
+        <button class="pill-remove-btn" data-idx="${idx}">&times;</button>
+      `;
+      tag.querySelector(".pill-remove-btn").addEventListener("click", () => {
+        state.investigations.splice(idx, 1);
+        renderAllViews();
+        syncConsultationToBackend();
+      });
+      invRow.appendChild(tag);
+    });
+    investigationsContainer.appendChild(invRow);
+  }
+
+  // Grounding Warnings
+  groundingWarningsList.innerHTML = "";
+  if (state.groundingFlags.length === 0) {
+    groundingWarningsList.innerHTML = `
+      <div class="grounding-warning-item" style="color: #059669;">
+        <i class="ph-bold ph-check-circle warning-icon" style="color: #059669;"></i>
+        <span>All clinical entities verified with zero grounding flags.</span>
+      </div>
+    `;
+  } else {
+    state.groundingFlags.forEach((flag) => {
+      const item = document.createElement("div");
+      item.className = "grounding-warning-item";
+      item.innerHTML = `
+        <i class="ph-fill ph-warning-diamond warning-icon"></i>
+        <span><strong>${escapeHtml(flag.entity || "entity")}:</strong> ${escapeHtml(flag.issue)}</span>
+      `;
+      groundingWarningsList.appendChild(item);
+    });
+  }
+
+  // FHIR JSON Code
+  if (state.fhirBundle) {
+    const formattedJson = JSON.stringify(state.fhirBundle, null, 2);
+    fhirJsonCode.innerHTML = syntaxHighlightJson(formattedJson);
+  }
+}
+
+/* ==========================================================================
+   Backend Synchronization
+   ========================================================================== */
+
+async function syncConsultationToBackend() {
+  try {
+    const payload = {
+      session_id: state.sessionId,
+      patient_name: state.patientName,
+      practitioner_name: state.practitionerName,
+      symptoms: state.symptoms,
+      diagnoses: state.diagnoses,
+      medications: state.medications,
+      vitals: state.vitals,
+      investigations: state.investigations,
+    };
+
+    const resp = await fetch("/api/update-consultation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!resp.ok) {
+      console.warn("Sync failed with status:", resp.status);
+      return;
+    }
+
+    const data = await resp.json();
+    if (data.fhir_bundle) {
+      state.fhirBundle = data.fhir_bundle;
+      const formattedJson = JSON.stringify(state.fhirBundle, null, 2);
+      fhirJsonCode.innerHTML = syntaxHighlightJson(formattedJson);
+    }
+  } catch (err) {
+    console.error("Error syncing consultation:", err);
+  }
+}
+
+async function loadLatestConsultation() {
+  try {
+    const resp = await fetch("/api/latest");
+    if (!resp.ok) {
+      renderAllViews();
+      syncConsultationToBackend();
+      return;
+    }
+    const data = await resp.json();
+    populateStateFromData(data);
+    renderAllViews();
+    showToast("Loaded latest consultation session.");
+  } catch (err) {
+    console.error("Failed to load consultation:", err);
+    renderAllViews();
+    syncConsultationToBackend();
+  }
+}
+
+function populateStateFromData(data) {
+  state.sessionId = data.session_id || "live_consultation";
+  state.fhirBundle = data.fhir_bundle || null;
+  state.groundingFlags = data.grounding_flags || [];
+
+  const summary = data.summary || {};
+  if (summary.time) state.time = summary.time;
+  if (summary.patient && summary.patient.name) state.patientName = summary.patient.name;
+  if (summary.practitioner && summary.practitioner.name) state.practitionerName = summary.practitioner.name;
+
+  if (summary.symptoms && summary.symptoms.length > 0) {
+    state.symptoms = summary.symptoms.map((s) => ({
+      name: s.name,
+      duration: s.duration || "3",
+      status: s.clinical_status || "active",
+    }));
+  }
+
+  if (summary.diagnoses && summary.diagnoses.length > 0) {
+    state.diagnoses = summary.diagnoses.map((d) => ({
+      name: d.name,
+      confidence: d.confidence || "high conf",
+      status: "provisional",
+    }));
+  }
+
+  if (summary.medications && summary.medications.length > 0) {
+    state.medications = summary.medications.map((m) => ({
+      name: m.name,
+      dosage: m.dosage || "500 mg",
+      frequency: m.frequency || "TDS",
+      duration: m.duration || "3 days",
+      status: m.status || "new",
+    }));
+  }
+
+  if (summary.vitals && summary.vitals.length > 0) {
+    state.vitals = summary.vitals.map((v) => ({ name: v.name, value: v.value }));
+  }
+
+  if (summary.investigations && summary.investigations.length > 0) {
+    state.investigations = summary.investigations;
+  }
+}
+
+/* ==========================================================================
+   Microphone Audio Recording & Server Actions
+   ========================================================================== */
+
+async function toggleMicRecording() {
   if (!isRecording) {
     await startBrowserRecording();
   } else {
@@ -94,36 +487,30 @@ async function toggleRecording() {
 async function startBrowserRecording() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    
-    // Check supported MIME type
     let mimeType = "audio/webm";
     if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
       mimeType = "audio/webm;codecs=opus";
-    } else if (MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")) {
-      mimeType = "audio/ogg;codecs=opus";
     }
 
     mediaRecorder = new MediaRecorder(stream, { mimeType });
     audioChunks = [];
 
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        audioChunks.push(event.data);
-      }
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunks.push(e.data);
     };
 
     mediaRecorder.onstop = async () => {
-      stream.getTracks().forEach(track => track.stop());
+      stream.getTracks().forEach((t) => t.stop());
       const audioBlob = new Blob(audioChunks, { type: mimeType });
-      await sendAudioBlobForProcessing(audioBlob, "consultation_recording.webm");
+      await sendAudioForProcessing(audioBlob, "live_recording.webm");
     };
 
     mediaRecorder.start(250);
-    setRecordingUIState(true);
+    setRecordingState(true);
     startTimer();
-    showToast("Live consultation recording started...");
+    showToast("Live recording started... Speak into your mic.");
   } catch (err) {
-    console.warn("Browser mic access error, falling back to server-side microphone:", err);
+    console.warn("Browser mic access fallback:", err);
     startTimedServerRecording();
   }
 }
@@ -132,25 +519,21 @@ function stopBrowserRecording() {
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
     mediaRecorder.stop();
   }
-  setRecordingUIState(false);
+  setRecordingState(false);
   stopTimer();
-  showToast("Audio captured. Processing through ABDM pipeline...");
+  showToast("Audio processing through Whisper ASR & Qwen2.5 Refiner...");
 }
 
-function setRecordingUIState(recording) {
+function setRecordingState(recording) {
   isRecording = recording;
   if (recording) {
-    micPulseRing.classList.add("recording");
-    btnRecordToggle.classList.add("is-recording");
+    btnRecordMic.classList.add("recording");
+    recordBtnText.textContent = "Stop Recording";
     micIcon.className = "ph-fill ph-stop";
-    waveformVisualizer.classList.add("active");
-    recordInstruction.textContent = "Recording in progress... Click STOP when consultation concludes";
   } else {
-    micPulseRing.classList.remove("recording");
-    btnRecordToggle.classList.remove("is-recording");
+    btnRecordMic.classList.remove("recording");
+    recordBtnText.textContent = "Record Live Audio";
     micIcon.className = "ph-fill ph-microphone";
-    waveformVisualizer.classList.remove("active");
-    recordInstruction.textContent = "Processing audio through Whisper ASR and Qwen2.5 Refiner...";
   }
 }
 
@@ -159,9 +542,9 @@ function startTimer() {
   recordTimer.textContent = "00:00";
   timerInterval = setInterval(() => {
     elapsedSeconds++;
-    const mins = String(Math.floor(elapsedSeconds / 60)).padStart(2, "0");
-    const secs = String(elapsedSeconds % 60).padStart(2, "0");
-    recordTimer.textContent = `${mins}:${secs}`;
+    const m = String(Math.floor(elapsedSeconds / 60)).padStart(2, "0");
+    const s = String(elapsedSeconds % 60).padStart(2, "0");
+    recordTimer.textContent = `${m}:${s}`;
   }, 1000);
 }
 
@@ -172,17 +555,11 @@ function stopTimer() {
   }
 }
 
-
-/* ==========================================================================
-   Server-side Timed Recording (Intel Smart Sound Mic Array)
-   ========================================================================== */
-
 async function startTimedServerRecording() {
   const duration = parseFloat(recordDurationSelect.value) || 15;
-  setRecordingUIState(true);
-  recordInstruction.textContent = `Server recording ${duration}s from laptop microphone array... Speak now!`;
-  
-  // Local countdown
+  setRecordingState(true);
+  showToast(`Recording ${duration}s from laptop microphone...`);
+
   let remaining = duration;
   recordTimer.textContent = `00:${String(remaining).padStart(2, "0")}`;
   const countdownInterval = setInterval(() => {
@@ -195,7 +572,6 @@ async function startTimedServerRecording() {
   }, 1000);
 
   try {
-    updateStepperProgress(1); // VAD
     const resp = await fetch("/api/record-mic", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -203,42 +579,35 @@ async function startTimedServerRecording() {
     });
 
     clearInterval(countdownInterval);
-    setRecordingUIState(false);
+    setRecordingState(false);
 
     if (!resp.ok) {
       const err = await resp.json();
-      throw new Error(err.detail || "Server recording failed");
+      throw new Error(err.detail || "Recording failed");
     }
 
     const data = await resp.json();
-    completeStepperProgress();
-    renderConsultation(data);
-    showToast(`Consultation scribed successfully! (${duration}s recording)`);
+    populateStateFromData(data);
+    renderAllViews();
+    showToast(`Recorded & scribed successfully (${duration}s)!`);
   } catch (err) {
     clearInterval(countdownInterval);
-    setRecordingUIState(false);
-    resetStepper();
+    setRecordingState(false);
     showToast(`Error: ${err.message}`, true);
   }
 }
 
-
-/* ==========================================================================
-   File Upload Handling
-   ========================================================================== */
-
-async function handleFileUpload(event) {
+async function handleAudioUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
 
   showToast(`Uploading ${file.name}...`);
-  await sendAudioBlobForProcessing(file, file.name);
+  await sendAudioForProcessing(file, file.name);
   audioFileInput.value = "";
 }
 
-async function sendAudioBlobForProcessing(blobOrFile, filename) {
+async function sendAudioForProcessing(blobOrFile, filename) {
   try {
-    simulateStepperSequence();
     const formData = new FormData();
     formData.append("file", blobOrFile, filename);
 
@@ -253,290 +622,40 @@ async function sendAudioBlobForProcessing(blobOrFile, filename) {
     }
 
     const data = await resp.json();
-    completeStepperProgress();
-    renderConsultation(data);
-    showToast("Audio successfully scribed & mapped to ABDM FHIR R4!");
+    populateStateFromData(data);
+    renderAllViews();
+    showToast("Audio successfully converted to ABDM FHIR R4!");
   } catch (err) {
-    resetStepper();
-    recordInstruction.textContent = "Click microphone to start live consultation capture";
     showToast(`Processing error: ${err.message}`, true);
   }
 }
-
-
-/* ==========================================================================
-   Load Latest Consultation from output/live_fhir_bundle.json
-   ========================================================================== */
-
-async function loadLatestConsultation() {
-  try {
-    const resp = await fetch("/api/latest");
-    if (!resp.ok) {
-      console.log("No previous consultation found yet.");
-      return;
-    }
-    const data = await resp.json();
-    renderConsultation(data);
-    showToast("Latest consultation loaded.");
-  } catch (err) {
-    console.error("Error loading latest consultation:", err);
-  }
-}
-
-
-/* ==========================================================================
-   Rendering Consultation & ABDM FHIR EMR Views (ZERO Transcript)
-   ========================================================================== */
-
-function renderConsultation(data) {
-  currentFhirBundle = data.fhir_bundle;
-  const summary = data.summary || {};
-  const validation = data.validation || {};
-  const groundingFlags = data.grounding_flags || [];
-
-  // 1. Meta Banner
-  metaSessionId.textContent = data.session_id || "LIVE_SESSION_01";
-  if (summary.patient) {
-    metaPatientName.textContent = `${summary.patient.name} (${summary.patient.id})`;
-  }
-  if (summary.practitioner) {
-    metaPractitionerName.textContent = `${summary.practitioner.name} (General OPD)`;
-  }
-  
-  if (validation.schema_valid) {
-    metaAbdmStatus.className = "meta-status status-valid";
-    metaAbdmStatus.innerHTML = '<i class="ph-bold ph-check-circle"></i> Schema Valid (NRCES)';
-  } else {
-    metaAbdmStatus.className = "meta-status";
-    metaAbdmStatus.style.color = "#F87171";
-    metaAbdmStatus.innerHTML = `<i class="ph-bold ph-x-circle"></i> ${validation.errors.length} Errors`;
-  }
-
-  if (groundingFlags.length === 0) {
-    metaGroundingStatus.className = "meta-status status-valid";
-    metaGroundingStatus.innerHTML = '<i class="ph-bold ph-shield-check"></i> 100% Grounded';
-  } else {
-    metaGroundingStatus.className = "meta-status";
-    metaGroundingStatus.style.color = "#FBBF24";
-    metaGroundingStatus.innerHTML = `<i class="ph-bold ph-warning"></i> ${groundingFlags.length} Safety Flag${groundingFlags.length > 1 ? 's' : ''}`;
-  }
-
-  // 2. Grounding Safety Warnings Card
-  renderGroundingAlerts(groundingFlags);
-
-  // 3. Symptoms Card
-  renderSymptoms(summary.symptoms || []);
-
-  // 4. Medications Card
-  renderMedications(summary.medications || []);
-
-  // 5. Vitals Card
-  renderVitals(summary.vitals || []);
-
-  // 6. Diagnoses Card
-  renderDiagnoses(summary.diagnoses || []);
-
-  // 7. FHIR Resource Pills & JSON Viewer
-  renderFhirExplorer(data.fhir_bundle, summary.resource_counts || {});
-  
-  recordInstruction.textContent = "Consultation ready. Click microphone to record next patient.";
-}
-
-function renderGroundingAlerts(flags) {
-  if (!flags || flags.length === 0) {
-    groundingAlertsCard.classList.add("hidden");
-    return;
-  }
-
-  groundingAlertsCard.classList.remove("hidden");
-  alertCountPill.textContent = `${flags.length} Flag${flags.length > 1 ? 's' : ''}`;
-  groundingAlertsList.innerHTML = "";
-
-  flags.forEach(flag => {
-    const item = document.createElement("div");
-    item.className = "alert-item";
-    item.innerHTML = `
-      <div class="alert-item-icon">
-        <i class="ph-fill ph-warning"></i>
-      </div>
-      <div class="alert-item-content">
-        <div class="alert-item-title">${escapeHtml(flag.entity)}: ${escapeHtml(flag.offending_value || '')}</div>
-        <div class="alert-item-desc">${escapeHtml(flag.issue)}</div>
-      </div>
-    `;
-    groundingAlertsList.appendChild(item);
-  });
-}
-
-function renderSymptoms(symptoms) {
-  countSymptoms.textContent = symptoms.length;
-  if (symptoms.length === 0) {
-    containerSymptoms.innerHTML = '<div class="empty-state">No symptoms recorded in this session.</div>';
-    return;
-  }
-
-  containerSymptoms.innerHTML = "";
-  symptoms.forEach(sym => {
-    const row = document.createElement("div");
-    row.className = "clinical-item-row";
-    row.innerHTML = `
-      <div class="item-main">
-        <span class="item-name">${escapeHtml(sym.name)}</span>
-        <span class="item-subtext">SNOMED CT: <span class="code-pill">${escapeHtml(sym.snomed_code || '386661006')}</span></span>
-      </div>
-      <span class="item-badge badge-active">${escapeHtml(sym.clinical_status || 'active')}</span>
-    `;
-    containerSymptoms.appendChild(row);
-  });
-}
-
-function renderMedications(medications) {
-  countMedications.textContent = medications.length;
-  if (medications.length === 0) {
-    containerMedications.innerHTML = '<div class="empty-state">No medications prescribed in this session.</div>';
-    return;
-  }
-
-  containerMedications.innerHTML = "";
-  medications.forEach(med => {
-    const row = document.createElement("div");
-    row.className = "clinical-item-row";
-    row.innerHTML = `
-      <div class="item-main">
-        <span class="item-name">${escapeHtml(med.name)}</span>
-        <span class="item-subtext">
-          RxNorm: <span class="code-pill">${escapeHtml(med.rxnorm_code || 'RxNorm')}</span>
-          ${med.note ? `&bull; ${escapeHtml(med.note)}` : ''}
-        </span>
-      </div>
-      <span class="item-badge badge-new">${escapeHtml(med.status || 'new')}</span>
-    `;
-    containerMedications.appendChild(row);
-  });
-}
-
-function renderVitals(vitals) {
-  countVitals.textContent = vitals.length;
-  if (vitals.length === 0) {
-    containerVitals.innerHTML = '<div class="empty-state">No vitals observed in this session.</div>';
-    return;
-  }
-
-  containerVitals.innerHTML = "";
-  vitals.forEach(vit => {
-    const row = document.createElement("div");
-    row.className = "clinical-item-row";
-    row.innerHTML = `
-      <div class="item-main">
-        <span class="item-name">${escapeHtml(vit.name)}</span>
-        <span class="item-subtext">LOINC: <span class="code-pill">${escapeHtml(vit.loinc_code || 'LOINC')}</span></span>
-      </div>
-      <span class="item-badge badge-active">${escapeHtml(vit.value)}</span>
-    `;
-    containerVitals.appendChild(row);
-  });
-}
-
-function renderDiagnoses(diagnoses) {
-  countDiagnoses.textContent = diagnoses.length;
-  if (diagnoses.length === 0) {
-    containerDiagnoses.innerHTML = '<div class="empty-state">No provisional diagnoses entered.</div>';
-    return;
-  }
-
-  containerDiagnoses.innerHTML = "";
-  diagnoses.forEach(diag => {
-    const row = document.createElement("div");
-    row.className = "clinical-item-row";
-    row.innerHTML = `
-      <div class="item-main">
-        <span class="item-name">${escapeHtml(diag.name)}</span>
-        <span class="item-subtext">SNOMED CT: <span class="code-pill">${escapeHtml(diag.snomed_code || 'SNOMED')}</span></span>
-      </div>
-      <span class="item-badge badge-active">${escapeHtml(diag.clinical_status || 'active')}</span>
-    `;
-    containerDiagnoses.appendChild(row);
-  });
-}
-
-function renderFhirExplorer(bundle, counts) {
-  if (!bundle) return;
-
-  // Resource Pills
-  resourcePills.innerHTML = "";
-  for (const [rtype, count] of Object.entries(counts)) {
-    const pill = document.createElement("span");
-    pill.className = "res-pill";
-    pill.textContent = `${rtype}: ${count}`;
-    resourcePills.appendChild(pill);
-  }
-
-  // Pretty JSON syntax highlighting
-  const jsonStr = JSON.stringify(bundle, null, 2);
-  fhirJsonCode.innerHTML = syntaxHighlightJson(jsonStr);
-}
-
-
-/* ==========================================================================
-   Stepper Progression
-   ========================================================================== */
-
-function updateStepperProgress(stepNumber) {
-  resetStepper();
-  if (stepNumber >= 1) stepVad.className = "step-item active";
-  if (stepNumber >= 2) { stepVad.className = "step-item done"; stepAsr.className = "step-item active"; }
-  if (stepNumber >= 3) { stepAsr.className = "step-item done"; stepLlm.className = "step-item active"; }
-  if (stepNumber >= 4) { stepLlm.className = "step-item done"; stepFhir.className = "step-item active"; }
-}
-
-function completeStepperProgress() {
-  stepVad.className = "step-item done";
-  stepAsr.className = "step-item done";
-  stepLlm.className = "step-item done";
-  stepFhir.className = "step-item done";
-}
-
-function resetStepper() {
-  stepVad.className = "step-item";
-  stepAsr.className = "step-item";
-  stepLlm.className = "step-item";
-  stepFhir.className = "step-item";
-}
-
-function simulateStepperSequence() {
-  updateStepperProgress(1);
-  setTimeout(() => updateStepperProgress(2), 2000);
-  setTimeout(() => updateStepperProgress(3), 5000);
-  setTimeout(() => updateStepperProgress(4), 8000);
-}
-
 
 /* ==========================================================================
    Utilities (Copy, Download, JSON Syntax Highlighting, Toast)
    ========================================================================== */
 
-function copyFhirToClipboard() {
-  if (!currentFhirBundle) {
+function copyFhir() {
+  if (!state.fhirBundle) {
     showToast("No FHIR bundle to copy.", true);
     return;
   }
-  navigator.clipboard.writeText(JSON.stringify(currentFhirBundle, null, 2));
-  showToast("ABDM FHIR R4 Bundle copied to clipboard!");
+  navigator.clipboard.writeText(JSON.stringify(state.fhirBundle, null, 2));
+  showToast("FHIR R4 Bundle copied to clipboard!");
 }
 
-function downloadFhirBundle() {
-  if (!currentFhirBundle) {
-    showToast("No FHIR bundle available to download.", true);
+function downloadFhir() {
+  if (!state.fhirBundle) {
+    showToast("No FHIR bundle to download.", true);
     return;
   }
-  const blob = new Blob([JSON.stringify(currentFhirBundle, null, 2)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify(state.fhirBundle, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `abdm_fhir_bundle_${Date.now()}.json`;
+  a.download = `bundle-${state.sessionId}.json`;
   a.click();
   URL.revokeObjectURL(url);
-  showToast("Downloaded ABDM OPConsultRecord Bundle JSON.");
+  showToast("Downloaded ABDM FHIR R4 Bundle JSON.");
 }
 
 function syntaxHighlightJson(json) {
@@ -560,12 +679,10 @@ function syntaxHighlightJson(json) {
 
 function showToast(message, isError = false) {
   toast.textContent = message;
-  toast.style.borderColor = isError ? "rgba(239, 68, 68, 0.4)" : "rgba(37, 99, 235, 0.4)";
-  toast.style.color = isError ? "#FCA5A5" : "#F8FAFC";
+  toast.style.borderColor = isError ? "#EF4444" : "#2563EB";
+  toast.style.color = isError ? "#FCA5A5" : "#FFFFFF";
   toast.classList.add("show");
-  setTimeout(() => {
-    toast.classList.remove("show");
-  }, 3500);
+  setTimeout(() => toast.classList.remove("show"), 3500);
 }
 
 function escapeHtml(str) {

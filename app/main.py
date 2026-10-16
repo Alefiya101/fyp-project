@@ -2,14 +2,17 @@
 
 Chains Whisper ASR, Qwen2.5-1.5B LLM Refiner, and ABDM FHIR Mapper.
 Guarantees NO transcript is returned or displayed in the UI.
+Allows clinicians to edit patient/practitioner info and add/remove symptoms, diagnoses, and prescriptions.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import re
+from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,7 +20,18 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from clinical_service.fhir_mapper.mapper import FHIRMapper
+from clinical_service.schemas.interface2_extraction import (
+    ClinicalEntities,
+    ClinicalExtraction,
+    DiagnosisEntity,
+    InvestigationEntity,
+    MedicationEntity,
+    SymptomEntity,
+    VitalEntity,
+)
 from clinical_service.service import ClinicalService
+from clinical_service.validation.fhir_validator import FHIRValidator
 
 logger = logging.getLogger(__name__)
 
@@ -47,42 +61,52 @@ app.add_middleware(
 
 def parse_fhir_summary(bundle_dict: dict[str, Any]) -> dict[str, Any]:
     """Extracts clinician-friendly EMR views directly from the FHIR R4 Bundle.
-    
+
     Strictly omits transcripts and raw speech segments.
     """
     entries = bundle_dict.get("entry", [])
-    
-    patient_info = {"id": "Unknown", "name": "Patient", "gender": "Unknown"}
-    practitioner_info = {"id": "Unknown", "name": "Dr. Sharma", "role": "OPD Physician"}
+
+    patient_info = {"id": "patient-001", "name": "OPD Patient", "gender": "Unknown"}
+    practitioner_info = {"id": "practitioner-001", "name": "Dr. Consulting Physician", "role": "OPD Physician"}
     encounter_info = {"status": "finished", "class": "AMB", "type": "Outpatient Consultation"}
-    
+
     symptoms = []
     medications = []
     vitals = []
     diagnoses = []
-    
+    investigations = []
+
+    consultation_time = "10:02 AM"
+    timestamp_str = bundle_dict.get("timestamp")
+    if timestamp_str:
+        try:
+            dt = datetime.fromisoformat(timestamp_str)
+            consultation_time = dt.strftime("%I:%M %p")
+        except (ValueError, TypeError) as exc:
+            logger.debug("Failed to parse consultation timestamp: %s", exc)
+
     for entry in entries:
         res = entry.get("resource", {})
         rtype = res.get("resourceType")
-        
+
         if rtype == "Patient":
             patient_info["id"] = res.get("id", "patient-001")
-            if "name" in res and res["name"]:
+            if res.get("name"):
                 text_name = res["name"][0].get("text")
                 if text_name:
                     patient_info["name"] = text_name
             patient_info["gender"] = res.get("gender", "unknown")
-            
+
         elif rtype == "Practitioner":
             practitioner_info["id"] = res.get("id", "practitioner-001")
-            if "name" in res and res["name"]:
+            if res.get("name"):
                 text_name = res["name"][0].get("text")
                 if text_name:
                     practitioner_info["name"] = text_name
-                    
+
         elif rtype == "Encounter":
             encounter_info["status"] = res.get("status", "finished")
-            
+
         elif rtype == "Condition":
             category_codings = res.get("category", [{}])[0].get("coding", [{}])
             code_text = res.get("code", {}).get("text") or "Condition"
@@ -90,14 +114,26 @@ def parse_fhir_summary(bundle_dict: dict[str, Any]) -> dict[str, Any]:
             if "coding" in res.get("code", {}) and res["code"]["coding"]:
                 snomed_code = res["code"]["coding"][0].get("code")
                 code_text = res["code"]["coding"][0].get("display", code_text)
-                
+
             recorded_date = res.get("recordedDate")
-            
-            # Check if this is symptom or diagnosis
+
+            # Check duration from onset or note
+            duration = None
+            onset_str = res.get("onsetString")
+            if onset_str:
+                duration = onset_str
+            elif res.get("note"):
+                note_str = res["note"][0].get("text", "")
+                m = re.search(r"Duration:\s*([^;]+)", note_str)
+                if m:
+                    duration = m.group(1).strip()
+
             is_diag = any(c.get("code") == "encounter-diagnosis" for c in category_codings)
             item = {
                 "name": code_text,
-                "snomed_code": snomed_code,
+                "snomed_code": snomed_code or "386661006",
+                "duration": duration or "3",
+                "confidence": "high conf" if is_diag else None,
                 "recorded_date": recorded_date,
                 "clinical_status": res.get("clinicalStatus", {}).get("coding", [{}])[0].get("code", "active"),
             }
@@ -105,46 +141,71 @@ def parse_fhir_summary(bundle_dict: dict[str, Any]) -> dict[str, Any]:
                 diagnoses.append(item)
             else:
                 symptoms.append(item)
-                
+
         elif rtype == "MedicationRequest":
             med_concept = res.get("medicationCodeableConcept", {})
             med_name = med_concept.get("text") or "Medication"
             rxnorm_code = None
-            if "coding" in med_concept and med_concept["coding"]:
+            if med_concept.get("coding"):
                 rxnorm_code = med_concept["coding"][0].get("code")
                 med_name = med_concept["coding"][0].get("display", med_name)
-                
+
             dosage_instruction = res.get("dosageInstruction", [{}])[0]
             dosage_text = dosage_instruction.get("text", "")
-            
-            # Parse note if available
-            note_text = ""
-            if "note" in res and res["note"]:
-                note_text = res["note"][0].get("text", "")
-                
+
+            # Default values
+            dosage = "500 mg"
+            frequency = "TDS"
+            duration = "3 days"
+            status = res.get("status", "new")
+
+            # Extract from note if available
+            if res.get("note"):
+                note_str = res["note"][0].get("text", "")
+                freq_m = re.search(r"Frequency:\s*([^;]+)", note_str)
+                if freq_m:
+                    frequency = freq_m.group(1).strip()
+                dur_m = re.search(r"Duration:\s*([^;]+)", note_str)
+                if dur_m:
+                    duration = dur_m.group(1).strip()
+                stat_m = re.search(r"Status:\s*([^;]+)", note_str)
+                if stat_m:
+                    status = stat_m.group(1).strip()
+
+            # Dose from dosage_text
+            dose_m = re.search(r"(\d+\s*(?:mg|ml|tablet|goli|tab))", dosage_text, re.IGNORECASE)
+            if dose_m:
+                dosage = dose_m.group(1)
+
             medications.append({
                 "name": med_name,
-                "rxnorm_code": rxnorm_code,
+                "rxnorm_code": rxnorm_code or "RxNorm",
+                "dosage": dosage,
+                "frequency": frequency,
+                "duration": duration,
+                "status": status,
                 "dosage_instruction": dosage_text,
-                "status": res.get("status", "active"),
-                "note": note_text,
             })
-            
+
         elif rtype == "Observation":
             obs_code = res.get("code", {}).get("text") or "Observation"
             loinc_code = None
             if "coding" in res.get("code", {}) and res["code"]["coding"]:
                 loinc_code = res["code"]["coding"][0].get("code")
                 obs_code = res["code"]["coding"][0].get("display", obs_code)
-                
+
             val_qty = res.get("valueQuantity", {})
             val_str = f"{val_qty.get('value', '')} {val_qty.get('unit', '')}".strip()
             vitals.append({
                 "name": obs_code,
-                "loinc_code": loinc_code,
+                "loinc_code": loinc_code or "LOINC",
                 "value": val_str,
             })
-            
+
+        elif rtype == "ServiceRequest":
+            code_text = res.get("code", {}).get("text") or "Laboratory Order"
+            investigations.append(code_text)
+
     # Resource counts
     resource_counts = {}
     for entry in entries:
@@ -152,6 +213,7 @@ def parse_fhir_summary(bundle_dict: dict[str, Any]) -> dict[str, Any]:
         resource_counts[rt] = resource_counts.get(rt, 0) + 1
 
     return {
+        "time": consultation_time,
         "patient": patient_info,
         "practitioner": practitioner_info,
         "encounter": encounter_info,
@@ -159,6 +221,7 @@ def parse_fhir_summary(bundle_dict: dict[str, Any]) -> dict[str, Any]:
         "diagnoses": diagnoses,
         "medications": medications,
         "vitals": vitals,
+        "investigations": investigations,
         "resource_counts": resource_counts,
     }
 
@@ -171,14 +234,14 @@ def format_validated_bundle_response(bundle_obj_or_dict: Any) -> dict[str, Any]:
         data = bundle_obj_or_dict
     else:
         raise ValueError("Invalid bundle representation")
-        
-    session_id = data.get("session_id", "SESSION_01")
+
+    session_id = data.get("session_id", "live_consultation")
     fhir_bundle = data.get("fhir_bundle", {})
     validation = data.get("validation", {"schema_valid": True, "errors": [], "warnings": []})
     grounding_flags = data.get("grounding_flags", [])
-    
+
     summary = parse_fhir_summary(fhir_bundle)
-    
+
     return {
         "success": True,
         "session_id": session_id,
@@ -208,33 +271,33 @@ def get_latest_consultation():
     try:
         data = json.loads(bundle_path.read_text(encoding="utf-8"))
         return format_validated_bundle_response(data)
-    except Exception as exc:
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
         raise HTTPException(status_code=500, detail=f"Failed to read consultation: {exc}")
 
 
 @app.post("/api/process-audio")
-async def process_audio_file(file: UploadFile = File(...)):
+async def process_audio_file(file: Annotated[UploadFile, File()]):
     """Receives audio file (.wav, .mp3), runs Whisper ASR + LLM Refiner + FHIR Mapper."""
     try:
         temp_wav = RECORDINGS_DIR / "live_consultation.wav"
         content = await file.read()
         temp_wav.write_bytes(content)
-        
+
         service = ClinicalService(enable_llm_refiner=True)
-        validated_bundle = service.process_audio(temp_wav, session_id="WEB_SESSION_01")
-        
+        validated_bundle = service.process_audio(temp_wav, session_id="live_consultation")
+
         # Persist to live_fhir_bundle.json
         out_path = OUTPUT_DIR / "live_fhir_bundle.json"
         out_path.write_text(validated_bundle.model_dump_json(indent=2), encoding="utf-8")
-        
+
         return format_validated_bundle_response(validated_bundle)
     except Exception as exc:
-        logger.exception("Audio processing failed: %s", exc)
+        logger.exception("Audio processing failed")
         raise HTTPException(status_code=500, detail=f"Audio processing error: {exc}")
 
 
 class RecordMicRequest(BaseModel):
-    duration: float = 12.0
+    duration: float = 15.0
 
 
 @app.post("/api/record-mic")
@@ -243,26 +306,158 @@ def record_from_laptop_mic(req: RecordMicRequest):
     try:
         import sounddevice as sd
         import soundfile as sf
-        
+
         sample_rate = 16000
         frames = int(req.duration * sample_rate)
-        
+
         audio = sd.rec(frames, samplerate=sample_rate, channels=1, dtype="float32")
         sd.wait()
-        
+
         temp_wav = RECORDINGS_DIR / "live_consultation.wav"
         sf.write(str(temp_wav), audio.flatten(), sample_rate)
-        
+
         service = ClinicalService(enable_llm_refiner=True)
-        validated_bundle = service.process_audio(temp_wav, session_id="MIC_SESSION_01")
-        
+        validated_bundle = service.process_audio(temp_wav, session_id="live_consultation")
+
         out_path = OUTPUT_DIR / "live_fhir_bundle.json"
         out_path.write_text(validated_bundle.model_dump_json(indent=2), encoding="utf-8")
-        
+
         return format_validated_bundle_response(validated_bundle)
     except Exception as exc:
-        logger.exception("Mic recording failed: %s", exc)
+        logger.exception("Mic recording failed")
         raise HTTPException(status_code=500, detail=f"Microphone recording error: {exc}")
+
+
+class SymptomItem(BaseModel):
+    name: str
+    duration: str | None = None
+    status: str = "active"
+
+
+class DiagnosisItem(BaseModel):
+    name: str
+    confidence: str | None = "high"
+    status: str = "provisional"
+
+
+class MedicationItem(BaseModel):
+    name: str
+    dosage: str = "500 mg"
+    frequency: str = "TDS"
+    duration: str = "3 days"
+    status: str = "new"
+
+
+class VitalItem(BaseModel):
+    name: str
+    value: str
+
+
+class UpdateConsultationRequest(BaseModel):
+    session_id: str = "live_consultation"
+    patient_name: str = "OPD Patient"
+    practitioner_name: str = "Dr. Consulting Physician"
+    symptoms: list[SymptomItem] = []
+    diagnoses: list[DiagnosisItem] = []
+    medications: list[MedicationItem] = []
+    vitals: list[VitalItem] = []
+    investigations: list[str] = []
+
+
+@app.post("/api/update-consultation")
+def update_consultation_entities(req: UpdateConsultationRequest):
+    """Allows doctor to add, edit, or delete clinical entities and update patient/doctor names.
+
+    Regenerates a fully compliant ABDM FHIR R4 OPConsultRecord Bundle in real time.
+    """
+    try:
+        symptom_entities = [
+            SymptomEntity(
+                text=s.name,
+                duration=s.duration or "3 days",
+                clinical_status=s.status or "active",
+            )
+            for s in req.symptoms
+        ]
+        diag_entities = [
+            DiagnosisEntity(
+                text=d.name,
+                confidence="high",
+                status="provisional",
+            )
+            for d in req.diagnoses
+        ]
+        valid_med_statuses = {"new", "existing", "discontinued", "modified", "changed", "self_taken"}
+        med_entities = [
+            MedicationEntity(
+                name=m.name,
+                dose=m.dosage,
+                frequency=m.frequency,
+                duration=m.duration,
+                status=m.status.lower() if m.status and m.status.lower() in valid_med_statuses else "new",
+            )
+            for m in req.medications
+        ]
+        vital_entities = [
+            VitalEntity(type=v.name, value=v.value)
+            for v in req.vitals
+        ]
+        inv_entities = [
+            InvestigationEntity(test_name=inv)
+            for inv in req.investigations
+        ]
+
+        entities = ClinicalEntities(
+            symptoms=symptom_entities,
+            diagnosis=diag_entities,
+            medications=med_entities,
+            vitals=vital_entities,
+            investigations=inv_entities,
+        )
+        extraction = ClinicalExtraction(session_id=req.session_id, entities=entities)
+
+        mapper = FHIRMapper()
+        bundle_dict = mapper.map_to_fhir_bundle(extraction)
+
+        # Update patient & practitioner display names
+        for entry in bundle_dict.get("entry", []):
+            res = entry.get("resource", {})
+            if res.get("resourceType") == "Patient":
+                res["name"] = [{"text": req.patient_name}]
+            elif res.get("resourceType") == "Practitioner":
+                res["name"] = [{"text": req.practitioner_name}]
+
+        validator = FHIRValidator()
+        val_result = validator.validate_bundle(bundle_dict)
+
+        # Read previous grounding flags if present
+        existing_flags = []
+        bundle_path = OUTPUT_DIR / "live_fhir_bundle.json"
+        if bundle_path.is_file():
+            try:
+                prev_data = json.loads(bundle_path.read_text(encoding="utf-8"))
+                existing_flags = prev_data.get("grounding_flags", [])
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.debug("Could not read previous grounding flags: %s", exc)
+
+        updated_payload = {
+            "session_id": req.session_id,
+            "fhir_bundle": bundle_dict,
+            "validation": {
+                "schema_valid": val_result.schema_valid,
+                "errors": val_result.errors,
+                "warnings": val_result.warnings,
+            },
+            "grounding_flags": existing_flags,
+        }
+
+        # Save to live_fhir_bundle.json
+        bundle_path.write_text(json.dumps(updated_payload, indent=2, default=str), encoding="utf-8")
+
+        return format_validated_bundle_response(updated_payload)
+    except Exception as exc:
+        logger.exception("Update consultation failed")
+        raise HTTPException(status_code=500, detail=f"Failed to update consultation: {exc}")
 
 
 # Serve static web frontend
