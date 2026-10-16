@@ -13,10 +13,14 @@
  * Strictly omits any transcript display.
  */
 
+function getLocalComputerTime() {
+  return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
+}
+
 // State Object
 const state = {
   sessionId: "live_consultation",
-  time: "10:02 AM",
+  time: getLocalComputerTime(),
   patientName: "OPD Patient",
   practitionerName: "Dr. Consulting Physician",
   symptoms: [
@@ -464,7 +468,7 @@ function populateStateFromData(data) {
   state.groundingFlags = data.grounding_flags || [];
 
   const summary = data.summary || {};
-  if (summary.time) state.time = summary.time;
+  state.time = getLocalComputerTime();
   if (summary.patient && summary.patient.name) state.patientName = summary.patient.name;
   if (summary.practitioner && summary.practitioner.name) state.practitionerName = summary.practitioner.name;
 

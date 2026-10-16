@@ -129,12 +129,15 @@ def parse_fhir_summary(bundle_dict: dict[str, Any]) -> dict[str, Any]:
     diagnoses = []
     investigations = []
 
-    consultation_time = "10:02 AM"
+    now_local = datetime.now().astimezone()
+    consultation_time = now_local.strftime("%I:%M %p").lstrip("0")
     timestamp_str = bundle_dict.get("timestamp")
     if timestamp_str:
         try:
             dt = datetime.fromisoformat(timestamp_str)
-            consultation_time = dt.strftime("%I:%M %p")
+            if dt.tzinfo is not None:
+                dt = dt.astimezone()
+            consultation_time = dt.strftime("%I:%M %p").lstrip("0")
         except (ValueError, TypeError) as exc:
             logger.debug("Failed to parse consultation timestamp: %s", exc)
 
