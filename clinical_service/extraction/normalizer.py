@@ -41,13 +41,15 @@ PHONETIC_CORRECTIONS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\b(?:khali\s*pet|khali\s*pet\s*lena)\b", re.IGNORECASE), "khali pet"),
     (re.compile(r"\b(?:din\s*me\s*dova|din\s*me\s*do\s*bar)\b", re.IGNORECASE), "din me 2 baar"),
     (re.compile(r"\b(?:din\s*me\s*tin\s*bar|din\s*me\s*3\s*bar)\b", re.IGNORECASE), "din me 3 baar"),
-    (re.compile(r"\b(?:sarurak\s*padi\s*to|zaroorat\s*pada\s*toh)\b", re.IGNORECASE), "zaroorat padi toh"),
+    (re.compile(r"\b(?:hylhar[,\s]*radinos|radinos|radi\s*nose)\b", re.IGNORECASE), "runny nose"),
+    (re.compile(r"\b(?:azulas)\b", re.IGNORECASE), "as well as"),
+    (re.compile(r"(?:औरस्वामके|स्वामके|\b(?:swamake|stomach\s*ek)\b)", re.IGNORECASE), "aur stomach ache"),
     (re.compile(r"\b(?:liktetahum|likh\s*deta\s*hum)\b", re.IGNORECASE), "likh deta hoon"),
     (re.compile(r"\b(?:karwal\s*lehnge|karwa\s*lenge)\b", re.IGNORECASE), "karwa lenge"),
 ]
 
-# Strips stray non-speech non-Devanagari scripts (e.g. Hebrew/Arabic/Korean/Vietnamese artifacts)
-STRAY_SCRIPT_RE = re.compile(r"[\u0590-\u05FF\u0600-\u06FF\uAC00-\uD7AF\u1EA0-\u1EF9]+")
+# Strips stray non-speech non-Devanagari scripts (e.g. Hebrew/Arabic/Korean/Vietnamese/CJK artifacts)
+STRAY_SCRIPT_RE = re.compile(r"[\u0590-\u05FF\u0600-\u06FF\uAC00-\uD7AF\u1EA0-\u1EF9\u3000-\u30FF\u4E00-\u9FFF]+")
 
 
 class MedicalTranscriptNormalizer:
