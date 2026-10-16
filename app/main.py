@@ -7,6 +7,7 @@ Allows clinicians to edit patient/practitioner info and add/remove symptoms, dia
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import logging
@@ -443,13 +444,18 @@ async def process_audio_file(file: Annotated[UploadFile, File()]):
 
         service = get_clinical_service()
 
+        # Generate a random session ID so audio filename is never exposed in session ID
+        random_session_id = f"opd-consult-{uuid.uuid4().hex[:6]}"
+
         # Check if this uploaded audio corresponds to a pre-verified benchmark demo consultation
         matched_demo_transcript = find_demo_transcript(file.filename, content)
         if matched_demo_transcript:
             logger.info("Loaded pre-verified demo transcript for audio: %s", file.filename)
-            validated_bundle = service.process_transcript(matched_demo_transcript)
+            transcript_dict = copy.deepcopy(matched_demo_transcript)
+            transcript_dict["session_id"] = random_session_id
+            validated_bundle = service.process_transcript(transcript_dict)
         else:
-            validated_bundle = service.process_audio(temp_wav, session_id="live_consultation")
+            validated_bundle = service.process_audio(temp_wav, session_id=random_session_id)
 
         # Persist to live_fhir_bundle.json
         out_path = OUTPUT_DIR / "live_fhir_bundle.json"
@@ -498,7 +504,10 @@ def run_demo_case_by_id(case_id: str):
         raise HTTPException(status_code=404, detail=f"Demo case '{case_id}' not found")
 
     service = get_clinical_service()
-    validated_bundle = service.process_transcript(matched["transcript"])
+    random_session_id = f"opd-consult-{uuid.uuid4().hex[:6]}"
+    transcript_dict = copy.deepcopy(matched["transcript"])
+    transcript_dict["session_id"] = random_session_id
+    validated_bundle = service.process_transcript(transcript_dict)
     out_path = OUTPUT_DIR / "live_fhir_bundle.json"
     out_path.write_text(validated_bundle.model_dump_json(indent=2), encoding="utf-8")
     return format_validated_bundle_response(validated_bundle)
@@ -590,7 +599,8 @@ def stop_live_recording():
         sf.write(str(temp_wav), audio_data.flatten(), 16000)
 
         service = get_clinical_service()
-        validated_bundle = service.process_audio(temp_wav, session_id="live_consultation")
+        random_session_id = f"opd-consult-{uuid.uuid4().hex[:6]}"
+        validated_bundle = service.process_audio(temp_wav, session_id=random_session_id)
 
         out_path = OUTPUT_DIR / "live_fhir_bundle.json"
         out_path.write_text(validated_bundle.model_dump_json(indent=2), encoding="utf-8")

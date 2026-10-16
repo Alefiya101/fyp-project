@@ -6,7 +6,7 @@
     "sha256": "8c72c51448c8ded64d91817b147b0c39c96e535f0b7f9eb3877fb72f716223ec",
     "file_size": 462422,
     "transcript": {
-      "session_id": "audio_7_viral_fever",
+      "session_id": "opd-consult-7842",
       "language_mix": "hi-en",
       "segments": [
         {"start": 0.0, "end": 2.5, "speaker": "doctor", "text": "Hello, what seems to be the problem?", "lang": "en-IN", "confidence": 1.0},
@@ -28,7 +28,7 @@
     "sha256": "9beef5a8da00d11e3d5db766b3050fc0d065f7ab6d48c0fae148e1368e0270f7",
     "file_size": 427094,
     "transcript": {
-      "session_id": "audio_6_diabetes",
+      "session_id": "opd-consult-5192",
       "language_mix": "hi-en",
       "segments": [
         {"start": 0.0, "end": 3.0, "speaker": "doctor", "text": "Good morning. Are you here for your diabetes check-up?", "lang": "en-IN", "confidence": 1.0},
@@ -50,7 +50,7 @@
     "sha256": "fe087ed0f4eadc94b914625166d774dcc542e1c8a2895714baee8eb0f2eaae97",
     "file_size": 660566,
     "transcript": {
-      "session_id": "audio_5_acidity",
+      "session_id": "opd-consult-8361",
       "language_mix": "hi-en",
       "segments": [
         {"start": 0.0, "end": 2.5, "speaker": "doctor", "text": "Hi, what symptoms are you experiencing?", "lang": "en-IN", "confidence": 1.0},
@@ -72,7 +72,7 @@
     "sha256": "d10cc3836669e7a5f3a6709115897dec293026c009bd4cebfddb56be2eb4c370",
     "file_size": 1142486,
     "transcript": {
-      "session_id": "audio_4_throat_infection",
+      "session_id": "opd-consult-4927",
       "language_mix": "hi-en",
       "segments": [
         {"start": 0.0, "end": 2.5, "speaker": "doctor", "text": "Hello, what problem are you facing?", "lang": "en-IN", "confidence": 1.0},
@@ -96,7 +96,7 @@
     "sha256": "2aacfb9fd12582d355b1b4852161f866d43473bb5d5f4e82c631858f200d54f1",
     "file_size": 467798,
     "transcript": {
-      "session_id": "audio_2_dehydration",
+      "session_id": "opd-consult-6284",
       "language_mix": "hi-en",
       "segments": [
         {"start": 0.0, "end": 2.0, "speaker": "doctor", "text": "Kya problem hai?", "lang": "hi-en", "confidence": 1.0},
