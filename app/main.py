@@ -10,10 +10,12 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any
 
+import numpy as np
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -296,25 +298,90 @@ async def process_audio_file(file: Annotated[UploadFile, File()]):
         raise HTTPException(status_code=500, detail=f"Audio processing error: {exc}")
 
 
-class RecordMicRequest(BaseModel):
-    duration: float = 15.0
+class LiveMicRecorder:
+    """Manages start/stop microphone stream recording for consultations of arbitrary length."""
 
+    def __init__(self) -> None:
+        self._stream: Any = None
+        self._frames: list[np.ndarray] = []
+        self._is_recording = False
+        self._lock = threading.Lock()
 
-@app.post("/api/record-mic")
-def record_from_laptop_mic(req: RecordMicRequest):
-    """Directly records audio using the laptop's microphone via sounddevice."""
-    try:
+    @property
+    def is_recording(self) -> bool:
+        with self._lock:
+            return self._is_recording
+
+    def start(self) -> None:
         import sounddevice as sd
+
+        with self._lock:
+            if self._is_recording:
+                return
+            self._frames = []
+            self._is_recording = True
+
+            def _callback(indata: np.ndarray, _frames: int, _time_info: Any, _status: Any) -> None:
+                if self._is_recording:
+                    self._frames.append(indata.copy())
+
+            self._stream = sd.InputStream(
+                samplerate=16000,
+                channels=1,
+                dtype="float32",
+                callback=_callback,
+            )
+            self._stream.start()
+
+    def stop(self) -> np.ndarray:
+        with self._lock:
+            if not self._is_recording:
+                return np.empty((0, 1), dtype=np.float32)
+            self._is_recording = False
+            stream = self._stream
+            self._stream = None
+
+        if stream is not None:
+            try:
+                stream.stop()
+                stream.close()
+            except Exception as e:  # noqa: BLE001
+                logger.debug("Error stopping microphone stream: %s", e)
+
+        if self._frames:
+            return np.concatenate(self._frames, axis=0)
+        return np.empty((0, 1), dtype=np.float32)
+
+
+live_recorder = LiveMicRecorder()
+
+
+@app.post("/api/record/start")
+def start_live_recording():
+    """Starts recording ambient doctor-patient consultation from the microphone."""
+    try:
+        live_recorder.start()
+        return {"success": True, "status": "recording"}
+    except Exception as exc:
+        logger.exception("Failed to start live recording")
+        raise HTTPException(status_code=500, detail=f"Failed to start recording: {exc}")
+
+
+@app.post("/api/record/stop")
+def stop_live_recording():
+    """Stops consultation recording and processes audio with Whisper + Qwen2.5 LLM Refiner + FHIR Mapper."""
+    try:
         import soundfile as sf
 
-        sample_rate = 16000
-        frames = int(req.duration * sample_rate)
-
-        audio = sd.rec(frames, samplerate=sample_rate, channels=1, dtype="float32")
-        sd.wait()
+        audio_data = live_recorder.stop()
+        if len(audio_data) < 1600:
+            raise HTTPException(
+                status_code=400,
+                detail="Consultation recording too short or no audio detected.",
+            )
 
         temp_wav = RECORDINGS_DIR / "live_consultation.wav"
-        sf.write(str(temp_wav), audio.flatten(), sample_rate)
+        sf.write(str(temp_wav), audio_data.flatten(), 16000)
 
         service = ClinicalService(enable_llm_refiner=True)
         validated_bundle = service.process_audio(temp_wav, session_id="live_consultation")
@@ -323,8 +390,10 @@ def record_from_laptop_mic(req: RecordMicRequest):
         out_path.write_text(validated_bundle.model_dump_json(indent=2), encoding="utf-8")
 
         return format_validated_bundle_response(validated_bundle)
+    except HTTPException:
+        raise
     except Exception as exc:
-        logger.exception("Mic recording failed")
+        logger.exception("Audio processing failed after stopping recording")
         raise HTTPException(status_code=500, detail=f"Microphone recording error: {exc}")
 
 

@@ -58,15 +58,12 @@ const btnCopyFhir = document.getElementById("btn-copy-fhir");
 const btnDownloadFhir = document.getElementById("btn-download-fhir");
 
 // Audio Controls
-const btnRecordMic = document.getElementById("btn-record-mic");
+const btnRecordToggle = document.getElementById("btn-record-toggle");
 const recordBtnText = document.getElementById("record-btn-text");
 const micIcon = document.getElementById("mic-icon");
 const recordTimer = document.getElementById("record-timer");
-const btnTimedRecord = document.getElementById("btn-timed-record");
-const recordDurationSelect = document.getElementById("record-duration-select");
 const btnUploadAudio = document.getElementById("btn-upload-audio");
 const audioFileInput = document.getElementById("audio-file-input");
-const btnReloadLatest = document.getElementById("btn-reload-latest");
 const toast = document.getElementById("toast");
 
 // Modals
@@ -123,12 +120,10 @@ function setupEventListeners() {
   btnCopyFhir.addEventListener("click", copyFhir);
   btnDownloadFhir.addEventListener("click", downloadFhir);
 
-  // Audio actions
-  btnRecordMic.addEventListener("click", toggleMicRecording);
-  btnTimedRecord.addEventListener("click", startTimedServerRecording);
+  // Audio actions (Option 1: Start/Stop Recording, Option 2: Upload Audio)
+  btnRecordToggle.addEventListener("click", toggleRecording);
   btnUploadAudio.addEventListener("click", () => audioFileInput.click());
   audioFileInput.addEventListener("change", handleAudioUpload);
-  btnReloadLatest.addEventListener("click", loadLatestConsultation);
 }
 
 /* ==========================================================================
@@ -476,63 +471,68 @@ function populateStateFromData(data) {
    Microphone Audio Recording & Server Actions
    ========================================================================== */
 
-async function toggleMicRecording() {
+async function toggleRecording() {
   if (!isRecording) {
-    await startBrowserRecording();
+    await startRecording();
   } else {
-    stopBrowserRecording();
+    await stopRecording();
   }
 }
 
-async function startBrowserRecording() {
+async function startRecording() {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    let mimeType = "audio/webm";
-    if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
-      mimeType = "audio/webm;codecs=opus";
+    const resp = await fetch("/api/record/start", { method: "POST" });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || "Failed to start recording");
     }
-
-    mediaRecorder = new MediaRecorder(stream, { mimeType });
-    audioChunks = [];
-
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) audioChunks.push(e.data);
-    };
-
-    mediaRecorder.onstop = async () => {
-      stream.getTracks().forEach((t) => t.stop());
-      const audioBlob = new Blob(audioChunks, { type: mimeType });
-      await sendAudioForProcessing(audioBlob, "live_recording.webm");
-    };
-
-    mediaRecorder.start(250);
     setRecordingState(true);
     startTimer();
-    showToast("Live recording started... Speak into your mic.");
+    showToast("Live consultation recording started. Speak freely...");
   } catch (err) {
-    console.warn("Browser mic access fallback:", err);
-    startTimedServerRecording();
+    showToast(`Error starting recording: ${err.message}`, true);
   }
 }
 
-function stopBrowserRecording() {
-  if (mediaRecorder && mediaRecorder.state !== "inactive") {
-    mediaRecorder.stop();
-  }
+async function stopRecording() {
   setRecordingState(false);
   stopTimer();
-  showToast("Audio processing through Whisper ASR & Qwen2.5 Refiner...");
+  showToast("Stopping recording & processing with Whisper & Qwen2.5 LLM Refiner...");
+
+  btnRecordToggle.disabled = true;
+  recordBtnText.textContent = "Processing...";
+  micIcon.className = "ph-bold ph-spinner ph-spin";
+
+  try {
+    const resp = await fetch("/api/record/stop", { method: "POST" });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || "Audio processing failed");
+    }
+
+    const data = await resp.json();
+    populateStateFromData(data);
+    renderAllViews();
+    showToast("Consultation processed & ABDM FHIR bundle updated!");
+  } catch (err) {
+    showToast(`Recording error: ${err.message}`, true);
+  } finally {
+    btnRecordToggle.disabled = false;
+    recordBtnText.textContent = "Start Recording";
+    micIcon.className = "ph-fill ph-microphone";
+    recordTimer.textContent = "00:00";
+  }
 }
 
 function setRecordingState(recording) {
   isRecording = recording;
   if (recording) {
-    btnRecordMic.classList.add("recording");
+    btnRecordToggle.classList.add("recording");
     recordBtnText.textContent = "Stop Recording";
     micIcon.className = "ph-fill ph-stop";
   } else {
-    btnRecordMic.classList.remove("recording");
-    recordBtnText.textContent = "Record Live Audio";
+    btnRecordToggle.classList.remove("recording");
+    recordBtnText.textContent = "Start Recording";
     micIcon.className = "ph-fill ph-microphone";
   }
 }
@@ -552,48 +552,6 @@ function stopTimer() {
   if (timerInterval) {
     clearInterval(timerInterval);
     timerInterval = null;
-  }
-}
-
-async function startTimedServerRecording() {
-  const duration = parseFloat(recordDurationSelect.value) || 15;
-  setRecordingState(true);
-  showToast(`Recording ${duration}s from laptop microphone...`);
-
-  let remaining = duration;
-  recordTimer.textContent = `00:${String(remaining).padStart(2, "0")}`;
-  const countdownInterval = setInterval(() => {
-    remaining--;
-    if (remaining >= 0) {
-      recordTimer.textContent = `00:${String(remaining).padStart(2, "0")}`;
-    } else {
-      clearInterval(countdownInterval);
-    }
-  }, 1000);
-
-  try {
-    const resp = await fetch("/api/record-mic", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ duration }),
-    });
-
-    clearInterval(countdownInterval);
-    setRecordingState(false);
-
-    if (!resp.ok) {
-      const err = await resp.json();
-      throw new Error(err.detail || "Recording failed");
-    }
-
-    const data = await resp.json();
-    populateStateFromData(data);
-    renderAllViews();
-    showToast(`Recorded & scribed successfully (${duration}s)!`);
-  } catch (err) {
-    clearInterval(countdownInterval);
-    setRecordingState(false);
-    showToast(`Error: ${err.message}`, true);
   }
 }
 

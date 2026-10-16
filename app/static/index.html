@@ -34,30 +34,17 @@
 
       <div class="topbar-controls">
         <div class="audio-control-group">
-          <button id="btn-record-mic" class="btn btn-mic" title="Record live consultation from microphone">
+          <!-- Option 1: Start / Stop Live Recording -->
+          <button id="btn-record-toggle" class="btn btn-mic" title="Start or Stop recording live consultation">
             <i class="ph-fill ph-microphone" id="mic-icon"></i>
-            <span id="record-btn-text">Record Live Audio</span>
+            <span id="record-btn-text">Start Recording</span>
           </button>
           <span class="record-timer" id="record-timer">00:00</span>
-          
-          <div class="timed-selector">
-            <select id="record-duration-select">
-              <option value="10">10s</option>
-              <option value="15" selected>15s</option>
-              <option value="30">30s</option>
-            </select>
-            <button id="btn-timed-record" class="btn btn-sm btn-ghost" title="Start timed server recording">
-              <i class="ph-bold ph-play"></i> Timed
-            </button>
-          </div>
 
-          <input type="file" id="audio-file-input" accept=".wav,.mp3,.m4a" class="hidden-input">
-          <button id="btn-upload-audio" class="btn btn-sm btn-ghost" title="Upload consultation WAV or MP3">
-            <i class="ph-bold ph-upload-simple"></i> Upload
-          </button>
-
-          <button id="btn-reload-latest" class="btn btn-sm btn-ghost" title="Load latest recorded consultation">
-            <i class="ph-bold ph-clock-counter-clockwise"></i> Reload
+          <!-- Option 2: Upload Audio File -->
+          <input type="file" id="audio-file-input" accept=".wav,.mp3,.m4a,.flac" class="hidden-input">
+          <button id="btn-upload-audio" class="btn btn-sm btn-ghost" title="Upload consultation audio (WAV, MP3)">
+            <i class="ph-bold ph-upload-simple"></i> Upload Audio
           </button>
         </div>
 
