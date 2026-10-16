@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Clinician Review — {{ session_id }}</title>
+  <link rel="stylesheet" href="/static/review.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <a href="/" class="btn btn-outline" style="padding: 0.35rem 0.75rem; font-size: 0.82rem;">← Back to Dashboard</a>
+      <span style="font-weight: 700; font-size: 1.05rem;">Session: {{ session_id }}</span>
+      {% if session %}
+        <span class="badge" style="background: #e2e8f0; color: #334155;">{{ session.status }}</span>
+      {% endif %}
+    </div>
+    <div class="navbar-actions">
+      {% if mock_mode %}
+        <span class="badge badge-mock">ABDM Sandbox (Mock Mode)</span>
+      {% endif %}
+      <span style="font-size: 0.82rem; color: #475569;">Consulting Physician: <strong>Dr. Sharma</strong></span>
+    </div>
+  </nav>
+
+  <div class="container" style="max-width: 1500px;">
+    <!-- Loading State -->
+    <div id="content-loading" style="text-align: center; padding: 3rem; color: #64748b;">
+      <h2>Loading consultation transcript and clinical draft...</h2>
+    </div>
+
+    <!-- Review Dual-Pane Workspace -->
+    <div id="review-workspace" class="review-grid" style="display: none;">
+      <!-- Left Pane: Transcript -->
+      <div class="pane">
+        <div class="pane-header">
+          <span class="pane-title">1. Ambient Consultation Transcript (Interface 1)</span>
+          <span style="font-size: 0.75rem; color: #64748b;">Hinglish (hi-en)</span>
+        </div>
+        <div class="pane-content" id="transcript-list">
+          <!-- Populated by review.js -->
+        </div>
+      </div>
+
+      <!-- Right Pane: Structured Clinical Draft -->
+      <div class="pane">
+        <div class="pane-header">
+          <span class="pane-title">2. Structured Clinical Draft (Interface 2)</span>
+          <span style="font-size: 0.75rem; color: #16a34a; font-weight: 600;">ABDM OPConsultRecord Standard</span>
+        </div>
+        <div class="pane-content">
+          <!-- Grounding Flags Banner -->
+          <div id="grounding-banner" style="display: none;"></div>
+
+          <!-- Symptoms Section -->
+          <div class="card-section">
+            <div class="section-title">Chief Complaints & Symptoms</div>
+            <table class="entity-table">
+              <thead>
+                <tr>
+                  <th>Symptom</th>
+                  <th>Duration</th>
+                  <th>Status</th>
+                  <th>Source Citation</th>
+                </tr>
+              </thead>
+              <tbody id="symptoms-tbody"></tbody>
+            </table>
+          </div>
+
+          <!-- Diagnosis Section -->
+          <div class="card-section">
+            <div class="section-title">Provisional / Final Diagnosis</div>
+            <table class="entity-table">
+              <thead>
+                <tr>
+                  <th>Diagnosis</th>
+                  <th>Status</th>
+                  <th>Confidence</th>
+                  <th>Source Citation</th>
+                </tr>
+              </thead>
+              <tbody id="diagnosis-tbody"></tbody>
+            </table>
+          </div>
+
+          <!-- Medications Section -->
+          <div class="card-section">
+            <div class="section-title">Prescribed & Home Medications</div>
+            <table class="entity-table">
+              <thead>
+                <tr>
+                  <th>Medication</th>
+                  <th>Dose</th>
+                  <th>Schedule</th>
+                  <th>Duration</th>
+                  <th>Status</th>
+                  <th>Source Citation</th>
+                </tr>
+              </thead>
+              <tbody id="medications-tbody"></tbody>
+            </table>
+          </div>
+
+          <!-- Vitals Section -->
+          <div class="card-section">
+            <div class="section-title">Physical Vitals</div>
+            <table class="entity-table">
+              <thead>
+                <tr>
+                  <th>Measurement</th>
+                  <th>Value</th>
+                  <th>Source Citation</th>
+                </tr>
+              </thead>
+              <tbody id="vitals-tbody"></tbody>
+            </table>
+          </div>
+
+          <!-- Investigations Section -->
+          <div class="card-section">
+            <div class="section-title">Investigations & Lab Tests</div>
+            <table class="entity-table">
+              <thead>
+                <tr>
+                  <th>Investigation</th>
+                  <th>Status</th>
+                  <th>Result</th>
+                  <th>Source Citation</th>
+                </tr>
+              </thead>
+              <tbody id="investigations-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Action Footer -->
+  <div class="action-footer">
+    <div style="display: flex; gap: 0.75rem;">
+      <button class="btn btn-outline" onclick="openFhirModal()">📄 View FHIR R4 Bundle JSON</button>
+      <button class="btn btn-outline" onclick="openAuditModal()">🔒 View Audit Trail</button>
+    </div>
+    <div style="display: flex; gap: 0.75rem;">
+      <button class="btn btn-outline" onclick="saveDraftEdits()">💾 Save In-line Edits</button>
+      <button class="btn btn-danger" onclick="rejectSession()">✕ Reject Draft</button>
+      <button class="btn btn-success" onclick="approveSession()">✓ Approve & Seal for ABDM</button>
+    </div>
+  </div>
+
+  <!-- JSON Modal -->
+  <div id="json-modal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="modal-title" style="font-size: 1rem; font-weight: 700;"></h3>
+        <button class="btn btn-outline" onclick="closeModal()" style="padding: 0.2rem 0.5rem;">✕</button>
+      </div>
+      <div class="modal-body">
+        <pre id="modal-json"></pre>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/review.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      initReview("{{ session_id }}");
+    });
+  </script>
+</body>
+</html>
