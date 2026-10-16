@@ -51,3 +51,9 @@ speech_service/**/__pycache__/
 speech_service/**/*.py[cod]
 speech_service/asr/*_wer*.csv
 speech_service/asr/*_benchmark.json
+
+# Audio recordings & scratch
+recordings/
+*.wav
+*.mp3
+scratch/

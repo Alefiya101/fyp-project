@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from clinical_service.extraction.extractor import ClinicalExtractor
+from clinical_service.extraction.normalizer import normalize_transcript
 from clinical_service.fhir_mapper.mapper import FHIRMapper
 from clinical_service.schemas.interface1_transcript import Transcript
 from clinical_service.schemas.interface2_extraction import ClinicalExtraction
@@ -68,6 +69,9 @@ class ClinicalService:
 
             transcript = Transcript.model_validate(raw_data)
 
+        # 1.5. Normalize and restore noisy ASR speech
+        transcript = normalize_transcript(transcript)
+
         # 2. Extract Structured Clinical Entities (Interface 2)
         extraction: ClinicalExtraction = self.extractor.extract(transcript)
 
@@ -99,6 +103,7 @@ class ClinicalService:
             transcript = Transcript.model_validate(transcript_input)
         else:
             transcript = transcript_input
+        transcript = normalize_transcript(transcript)
         return self.extractor.extract(transcript)
 
     def process_audio(

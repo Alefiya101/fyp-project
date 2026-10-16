@@ -148,13 +148,13 @@ class SpeechService:
                 terms = [ln.strip() for ln in lines if ln.strip() and not ln.startswith("#")]
                 if terms:
                     return (
-                        "Doctor-patient OPD consultation in Hindi and English. "
-                        "Medical keywords: " + ", ".join(terms[:60])
+                        "Doctor-patient OPD clinical consultation in Hindi and English: "
+                        + ", ".join(terms[:25])
                     )
             except Exception as e:  # noqa: BLE001
                 logger.warning("Failed to read medical lexicon at '%s': %s", lex_path, e)
 
-        return "Doctor-patient OPD clinical consultation in Hindi and English. Symptoms, vitals, prescriptions."
+        return "Doctor-patient OPD clinical consultation in Hindi and English: fever, cough, khansi, bukhar, dard, infection, tablets."
 
     def _get_model(self):
         """Load the Hugging Face Transformers model and processor on first access."""
@@ -263,8 +263,10 @@ class SpeechService:
                 input_features = inputs.input_features.to(model.device)
                 generation_kwargs = {
                     "task": "transcribe",
-                    "language": None,
+                    "language": "en",
                     "num_beams": 1,
+                    "repetition_penalty": 1.15,
+                    "no_repeat_ngram_size": 3,
                     "return_dict_in_generate": True,
                     "output_scores": True,
                 }
@@ -277,20 +279,24 @@ class SpeechService:
                 with torch.inference_mode():
                     output = model.generate(input_features, **generation_kwargs)
 
-                # In HuggingFace Transformers, prompt_ids are prepended to the output tokens.
-                # We slice them off so only the actual spoken words are decoded!
-                seqs = output.sequences
-                if prompt_ids is not None:
-                    prompt_len = prompt_ids.shape[-1]
-                    seqs = seqs[:, prompt_len:]
-
-                text = processor.batch_decode(seqs, skip_special_tokens=True)[0].strip()
-
-                # Safety fallback: clean up any remaining prompt echoes
-                if text.lower().startswith("doctor-patient opd consultation"):
-                    kw_idx = text.lower().find("spo2")
-                    if kw_idx != -1:
-                        text = text[kw_idx + 4 :].strip(" ,.:;")
+                # In HuggingFace Transformers, prompt_ids appear prior to <|startoftranscript|>.
+                # We extract tokens strictly after <|startoftranscript|> to decode ONLY actual speech.
+                seq = output.sequences[0]
+                start_token = processor.tokenizer.convert_tokens_to_ids("<|startoftranscript|>")
+                matches = (seq == start_token).nonzero(as_tuple=True)[0]
+                if len(matches) > 0:
+                    actual_tokens = seq[matches[0] + 1 :]
+                    text = processor.decode(
+                        actual_tokens,
+                        skip_special_tokens=True,
+                        clean_up_tokenization_spaces=False,
+                    ).strip()
+                else:
+                    text = processor.decode(
+                        seq,
+                        skip_special_tokens=True,
+                        clean_up_tokenization_spaces=False,
+                    ).strip()
                 if output.scores:
                     token_scores = model.compute_transition_scores(
                         output.sequences, output.scores, normalize_logits=True
@@ -353,8 +359,14 @@ class SpeechService:
         # 1. Load + preprocess
         wav = self._load_and_preprocess(path)
 
-        # 2. VAD
-        vad_segs = get_speech_segments(wav, sr=16_000, threshold=self._vad_threshold)
+        # 2. VAD - conversational parameters to avoid micro-chopping words
+        vad_segs = get_speech_segments(
+            wav,
+            sr=16_000,
+            threshold=self._vad_threshold,
+            min_speech_duration_ms=350,
+            min_silence_duration_ms=350,
+        )
         if not vad_segs:
             logger.info("No speech detected in '%s'.", path)
             return _build_transcript_json(sid, [])
@@ -373,7 +385,17 @@ class SpeechService:
             doctor = self._identify_person_a(transcript_segs)
             transcript_segs = [s for s in transcript_segs if s.speaker == doctor]
 
-        return _build_transcript_json(sid, transcript_segs)
+        transcript_json = _build_transcript_json(sid, transcript_segs)
+
+        # 7. Medical transcript normalizer & phonetic term correction
+        try:
+            from clinical_service.extraction.normalizer import normalize_transcript
+
+            transcript_json = normalize_transcript(transcript_json)
+        except Exception as norm_err:  # noqa: BLE001
+            logger.debug("Medical transcript normalization skipped: %s", norm_err)
+
+        return transcript_json
 
     def transcribe_stream(
         self,

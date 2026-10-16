@@ -228,3 +228,26 @@ def test_speech_confidence_and_speaker_plausibility_grounding():
     assert len(flags) >= 2
     assert any("low-confidence speech turn" in f.issue for f in flags)
     assert any("patient speech turn without doctor confirmation" in f.issue for f in flags)
+
+
+def test_medical_transcript_normalizer():
+    from clinical_service.extraction.normalizer import get_medical_normalizer
+
+    normalizer = get_medical_normalizer()
+
+    # Test 1: cleans foreign script hallucinations
+    raw1 = "G-celldior, khansi, huihe موجی"
+    cleaned1 = normalizer.normalize_sentence(raw1)
+    assert "khansi hui hai" in cleaned1
+    assert "موجی" not in cleaned1
+
+    # Test 2: cleans fuzzy drug names
+    raw2 = "azithromycin car 500 mg lena hai"
+    cleaned2 = normalizer.normalize_sentence(raw2)
+    assert "azithromycin" in cleaned2
+
+    # Test 3: cleans phonetic slang
+    raw3 = "dolohyv any symptoms of fever"
+    cleaned3 = normalizer.normalize_sentence(raw3)
+    assert "do you have" in cleaned3
+    assert "fever" in cleaned3
