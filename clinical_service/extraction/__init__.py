@@ -4,6 +4,11 @@ from clinical_service.extraction.extractor import (
     LlamaCppSLMExtractor,
     RuleBasedSLMExtractor,
 )
+from clinical_service.extraction.llm_refiner import (
+    ClinicalLLMRefiner,
+    get_llm_refiner,
+    refine_transcript,
+)
 from clinical_service.extraction.normalizer import (
     MedicalTranscriptNormalizer,
     get_medical_normalizer,
@@ -21,6 +26,7 @@ from clinical_service.extraction.temporal_med_logic import (
 __all__ = [
     "BaseExtractor",
     "ClinicalExtractor",
+    "ClinicalLLMRefiner",
     "LlamaCppSLMExtractor",
     "MedicalTranscriptNormalizer",
     "RuleBasedSLMExtractor",
@@ -29,7 +35,10 @@ __all__ = [
     "extract_dose",
     "extract_duration",
     "extract_frequency",
+    "get_llm_refiner",
     "get_medical_normalizer",
     "is_negated",
     "normalize_transcript",
+    "refine_transcript",
 ]
+

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from clinical_service.extraction.extractor import ClinicalExtractor
+from clinical_service.extraction.llm_refiner import refine_transcript
 from clinical_service.extraction.normalizer import normalize_transcript
 from clinical_service.fhir_mapper.mapper import FHIRMapper
 from clinical_service.schemas.interface1_transcript import Transcript
@@ -33,11 +34,13 @@ class ClinicalService:
         extractor_backend: str = "rule_based",
         model_path: str | None = None,
         strict_grounding: bool = False,
+        enable_llm_refiner: bool = True,
     ):
         self.extractor = ClinicalExtractor(backend=extractor_backend, model_path=model_path)
         self.mapper = FHIRMapper()
         self.grounding_checker = GroundingChecker(strict_mode=strict_grounding)
         self.fhir_validator = FHIRValidator()
+        self.enable_llm_refiner = enable_llm_refiner
 
     def process_transcript(
         self,
@@ -68,6 +71,10 @@ class ClinicalService:
                 raw_data = {**raw_data, "segments": cleaned_segments}
 
             transcript = Transcript.model_validate(raw_data)
+
+        # 1.4. Reconstruct noisy ASR dialogue using Local LLM Refiner (Qwen2.5-1.5B)
+        if self.enable_llm_refiner:
+            transcript = refine_transcript(transcript)
 
         # 1.5. Normalize and restore noisy ASR speech
         transcript = normalize_transcript(transcript)
@@ -103,6 +110,8 @@ class ClinicalService:
             transcript = Transcript.model_validate(transcript_input)
         else:
             transcript = transcript_input
+        if self.enable_llm_refiner:
+            transcript = refine_transcript(transcript)
         transcript = normalize_transcript(transcript)
         return self.extractor.extract(transcript)
 

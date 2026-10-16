@@ -251,3 +251,53 @@ def test_medical_transcript_normalizer():
     cleaned3 = normalizer.normalize_sentence(raw3)
     assert "do you have" in cleaned3
     assert "fever" in cleaned3
+
+
+def test_clinical_llm_refiner():
+    from clinical_service.extraction.llm_refiner import (
+        get_llm_refiner,
+        refine_transcript,
+    )
+
+    refiner = get_llm_refiner()
+
+    # Test 1: dictionary input with acoustic/phonetic errors
+    noisy_dict = {
+        "session_id": "TEST_REFINER_01",
+        "language_mix": "hi-en",
+        "segments": [
+            {"start": 0.0, "end": 2.0, "speaker": "patient", "text": "cello rocker sar"},
+            {"start": 2.1, "end": 5.0, "speaker": "patient", "text": "jay khaase sardi or evar uwah hai sath dinos"},
+            {"start": 5.1, "end": 8.0, "speaker": "doctor", "text": "asthma asthma cough liquor door timer afternoon meals"},
+        ],
+    }
+    refined_dict = refiner.refine_transcript(noisy_dict)
+    assert "Hello doctor sir" in refined_dict["segments"][0]["text"]
+    assert "Mujhe khansi, sardi aur fever hua hai" in refined_dict["segments"][1]["text"]
+    assert "Azithromycin aur cough syrup" in refined_dict["segments"][2]["text"]
+
+    # Test 2: Pydantic Transcript model input
+    transcript = Transcript(
+        session_id="TEST_REFINER_02",
+        segments=[
+            TranscriptSegment(start=0.0, end=2.0, speaker="patient", text="cello rocker sar", confidence=0.8),
+            TranscriptSegment(start=2.1, end=5.0, speaker="patient", text="jay khaase sardi or evar uwah hai", confidence=0.85),
+            TranscriptSegment(start=5.1, end=8.0, speaker="doctor", text="Dolo 650 mg ek ek goli lena", confidence=0.9),
+        ],
+    )
+    refined_t = refine_transcript(transcript)
+    assert "Hello doctor sir" in refined_t.segments[0].text
+    assert "fever" in refined_t.segments[1].text.lower()
+
+    # Test 3: End-to-end integration through ClinicalService
+    service = ClinicalService(enable_llm_refiner=True)
+    bundle = service.process_transcript(transcript)
+    assert bundle.validation.schema_valid is True
+    assert len(bundle.validation.errors) == 0
+    assert bundle.session_id == "TEST_REFINER_02"
+    # Medication Dolo 650 mg should be extracted and mapped to FHIR
+    resource_types = [entry["resource"]["resourceType"] for entry in bundle.fhir_bundle["entry"]]
+    assert "MedicationRequest" in resource_types
+    assert "Condition" in resource_types
+
+
