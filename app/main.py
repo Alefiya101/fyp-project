@@ -302,13 +302,15 @@ async def process_audio_file(file: Annotated[UploadFile, File()]):
         if not content:
             raise HTTPException(status_code=400, detail="Uploaded audio file is empty.")
 
-        # Decode using soundfile (supports wav, mp3, flac, ogg, etc.)
+        # Decode using load_audio (supports wav, mp3, m4a, flac, ogg via soundfile + PyAV)
+        ext = Path(file.filename or "audio.wav").suffix.lower() or ".wav"
+        temp_raw = RECORDINGS_DIR / f"upload_raw{ext}"
+        temp_raw.write_bytes(content)
+
         try:
-            audio_data, sr = sf.read(io.BytesIO(content), dtype="float32", always_2d=False)
-        except Exception:  # noqa: BLE001
-            ext = Path(file.filename or "audio.wav").suffix.lower() or ".wav"
-            temp_raw = RECORDINGS_DIR / f"upload_raw{ext}"
-            temp_raw.write_bytes(content)
+            from speech_service.preprocessing.denoise import load_audio
+            audio_data, sr = load_audio(str(temp_raw))
+        except Exception:
             audio_data, sr = sf.read(str(temp_raw), dtype="float32", always_2d=False)
 
         # Convert to mono if multi-channel
