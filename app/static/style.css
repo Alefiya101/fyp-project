@@ -183,6 +183,24 @@ body {
   outline: none;
 }
 
+.demo-case-select {
+  background: #FFFFFF;
+  border: 1px solid var(--border-card);
+  color: var(--text-main);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.demo-case-select:hover {
+  border-color: var(--primary-blue);
+  color: var(--primary-blue);
+}
+
 .topbar-badge {
   display: inline-flex;
   align-items: center;

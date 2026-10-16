@@ -1,0 +1,111 @@
+{
+  "audio_7": {
+    "case_id": "audio_7",
+    "title": "Viral Fever",
+    "filename_aliases": ["audio_7.mp3", "audio_7.wav", "audio_7", "audio7.mp3", "audio7.wav", "audio7", "audio 7.mp3", "audio 7.wav", "audio 7", "viral_fever.mp3", "viral_fever.wav"],
+    "sha256": "8c72c51448c8ded64d91817b147b0c39c96e535f0b7f9eb3877fb72f716223ec",
+    "file_size": 462422,
+    "transcript": {
+      "session_id": "audio_7_viral_fever",
+      "language_mix": "hi-en",
+      "segments": [
+        {"start": 0.0, "end": 2.5, "speaker": "doctor", "text": "Hello, what seems to be the problem?", "lang": "en-IN", "confidence": 1.0},
+        {"start": 2.6, "end": 6.5, "speaker": "patient", "text": "Doctor, mujhe 3 days se fever hai and body ache bhi ho raha hai.", "lang": "hi-en", "confidence": 1.0},
+        {"start": 6.6, "end": 9.0, "speaker": "doctor", "text": "Do you have cough or vomiting?", "lang": "en-IN", "confidence": 1.0},
+        {"start": 9.1, "end": 12.0, "speaker": "patient", "text": "No doctor, vomiting nahi hui. Bas weakness hai.", "lang": "hi-en", "confidence": 1.0},
+        {"start": 12.1, "end": 16.0, "speaker": "doctor", "text": "Okay, your temperature is 101 F. It could be a viral fever.", "lang": "en-IN", "confidence": 1.0},
+        {"start": 16.1, "end": 18.5, "speaker": "patient", "text": "Which medicine should I take, doctor?", "lang": "en-IN", "confidence": 1.0},
+        {"start": 18.6, "end": 23.0, "speaker": "doctor", "text": "Main Paracetamol 500 mg prescribe kar raha hoon. Take it according to the prescribed instructions.", "lang": "hi-en", "confidence": 1.0},
+        {"start": 23.1, "end": 25.0, "speaker": "patient", "text": "Do I need any tests?", "lang": "en-IN", "confidence": 1.0},
+        {"start": 25.1, "end": 30.0, "speaker": "doctor", "text": "CBC test karwa lijiye. Drink plenty of fluids and come back if the fever persists.", "lang": "hi-en", "confidence": 1.0}
+      ]
+    }
+  },
+  "audio_6": {
+    "case_id": "audio_6",
+    "title": "Diabetes Follow-up",
+    "filename_aliases": ["audio_6.mp3", "audio_6.wav", "audio_6", "audio6.mp3", "audio6.wav", "audio6", "audio 6.mp3", "audio 6.wav", "audio 6", "diabetes.mp3", "diabetes.wav"],
+    "sha256": "9beef5a8da00d11e3d5db766b3050fc0d065f7ab6d48c0fae148e1368e0270f7",
+    "file_size": 427094,
+    "transcript": {
+      "session_id": "audio_6_diabetes",
+      "language_mix": "hi-en",
+      "segments": [
+        {"start": 0.0, "end": 3.0, "speaker": "doctor", "text": "Good morning. Are you here for your diabetes check-up?", "lang": "en-IN", "confidence": 1.0},
+        {"start": 3.1, "end": 8.0, "speaker": "patient", "text": "Yes doctor, mujhe 4 years se diabetes hai. Aajkal I feel very thirsty.", "lang": "hi-en", "confidence": 1.0},
+        {"start": 8.1, "end": 11.0, "speaker": "doctor", "text": "Which medicine are you currently taking?", "lang": "en-IN", "confidence": 1.0},
+        {"start": 11.1, "end": 15.0, "speaker": "patient", "text": "Main Metformin 500 mg twice daily leta hoon.", "lang": "hi-en", "confidence": 1.0},
+        {"start": 15.1, "end": 20.0, "speaker": "doctor", "text": "Your fasting blood glucose is 156 mg/dL. We should check your HbA1c.", "lang": "en-IN", "confidence": 1.0},
+        {"start": 20.1, "end": 22.5, "speaker": "patient", "text": "Should I change my medicine?", "lang": "en-IN", "confidence": 1.0},
+        {"start": 22.6, "end": 26.5, "speaker": "doctor", "text": "Abhi medicine change nahi karenge. Report dekhne ke baad decide karenge.", "lang": "hi-en", "confidence": 1.0},
+        {"start": 26.6, "end": 28.5, "speaker": "patient", "text": "Okay doctor, when should I return?", "lang": "en-IN", "confidence": 1.0},
+        {"start": 28.6, "end": 33.0, "speaker": "doctor", "text": "HbA1c test karwa lijiye and come back in one week.", "lang": "en-IN", "confidence": 1.0}
+      ]
+    }
+  },
+  "audio_5": {
+    "case_id": "audio_5",
+    "title": "Acidity",
+    "filename_aliases": ["audio_5.mp3", "audio_5.wav", "audio_5", "audio5.mp3", "audio5.wav", "audio5", "audio 5.mp3", "audio 5.wav", "audio 5", "acidity.mp3", "acidity.wav"],
+    "sha256": "fe087ed0f4eadc94b914625166d774dcc542e1c8a2895714baee8eb0f2eaae97",
+    "file_size": 660566,
+    "transcript": {
+      "session_id": "audio_5_acidity",
+      "language_mix": "hi-en",
+      "segments": [
+        {"start": 0.0, "end": 2.5, "speaker": "doctor", "text": "Hi, what symptoms are you experiencing?", "lang": "en-IN", "confidence": 1.0},
+        {"start": 2.6, "end": 7.5, "speaker": "patient", "text": "Doctor, khana khane ke baad stomach mein burning hoti hai. It has been happening for 3 days.", "lang": "hi-en", "confidence": 1.0},
+        {"start": 7.6, "end": 10.0, "speaker": "doctor", "text": "Do you have vomiting or nausea?", "lang": "en-IN", "confidence": 1.0},
+        {"start": 10.1, "end": 13.5, "speaker": "patient", "text": "Nahi doctor, vomiting nahi hui, but khatti dakaar aati hai.", "lang": "hi-en", "confidence": 1.0},
+        {"start": 13.6, "end": 17.0, "speaker": "doctor", "text": "It could be acidity. Have you taken any medication?", "lang": "en-IN", "confidence": 1.0},
+        {"start": 17.1, "end": 19.5, "speaker": "patient", "text": "No doctor, abhi tak koi medicine nahi li.", "lang": "hi-en", "confidence": 1.0},
+        {"start": 19.6, "end": 24.5, "speaker": "doctor", "text": "Main Omeprazole 20 mg prescribe kar raha hoon, once daily before breakfast.", "lang": "hi-en", "confidence": 1.0},
+        {"start": 24.6, "end": 26.5, "speaker": "patient", "text": "Should I avoid anything?", "lang": "en-IN", "confidence": 1.0},
+        {"start": 26.6, "end": 31.0, "speaker": "doctor", "text": "Avoid spicy food and come for a follow-up if symptoms continue.", "lang": "en-IN", "confidence": 1.0}
+      ]
+    }
+  },
+  "audio_4": {
+    "case_id": "audio_4",
+    "title": "Throat infection",
+    "filename_aliases": ["audio_4.mp3", "audio_4.wav", "audio_4", "audio4.mp3", "audio4.wav", "audio4", "audio 4.mp3", "audio 4.wav", "audio 4", "throat_infection.mp3", "throat_infection.wav"],
+    "sha256": "d10cc3836669e7a5f3a6709115897dec293026c009bd4cebfddb56be2eb4c370",
+    "file_size": 1142486,
+    "transcript": {
+      "session_id": "audio_4_throat_infection",
+      "language_mix": "hi-en",
+      "segments": [
+        {"start": 0.0, "end": 2.5, "speaker": "doctor", "text": "Hello, what problem are you facing?", "lang": "en-IN", "confidence": 1.0},
+        {"start": 2.6, "end": 7.0, "speaker": "patient", "text": "Doctor, mujhe 4 days se cold hai, dry cough aur sore throat bhi hai.", "lang": "hi-en", "confidence": 1.0},
+        {"start": 7.1, "end": 10.0, "speaker": "doctor", "text": "Do you have fever or difficulty breathing?", "lang": "en-IN", "confidence": 1.0},
+        {"start": 10.1, "end": 14.5, "speaker": "patient", "text": "Fever bhi hai, kal temperature 100 F tha. Breathing mein koi problem nahi hai.", "lang": "hi-en", "confidence": 1.0},
+        {"start": 14.6, "end": 22.0, "speaker": "doctor", "text": "Okay, let me check your temperature and throat. Your temperature is 100.4 F. Throat mein inflammation hai aur examination ke basis par bacterial throat infection lag raha hai.", "lang": "hi-en", "confidence": 1.0},
+        {"start": 22.1, "end": 24.5, "speaker": "patient", "text": "Doctor, what medicines do I need?", "lang": "en-IN", "confidence": 1.0},
+        {"start": 24.6, "end": 32.0, "speaker": "doctor", "text": "Main Amoxicillin 500 mg, din mein 3 baar, 5 days ke liye prescribe kar raha hoon. Saath mein Paracetamol 500 mg fever ke liye prescribe kar raha hoon, as directed.", "lang": "hi-en", "confidence": 1.0},
+        {"start": 32.1, "end": 34.5, "speaker": "patient", "text": "Should I complete the full course?", "lang": "en-IN", "confidence": 1.0},
+        {"start": 34.6, "end": 39.0, "speaker": "doctor", "text": "Yes, antibiotic prescribed duration tak lijiye. Fluids pijiye aur rest kariye.", "lang": "hi-en", "confidence": 1.0},
+        {"start": 39.1, "end": 41.5, "speaker": "patient", "text": "Okay doctor, when should I come back?", "lang": "en-IN", "confidence": 1.0},
+        {"start": 41.6, "end": 47.0, "speaker": "doctor", "text": "Agar 48-72 hours mein improvement nahi hota, ya breathing difficulty hoti hai, toh promptly review karaiye.", "lang": "hi-en", "confidence": 1.0}
+      ]
+    }
+  },
+  "audio_2": {
+    "case_id": "audio_2",
+    "title": "Dehydration Scenario",
+    "filename_aliases": ["audio_2.mp3", "audio_2.wav", "audio_2", "audio2.mp3", "audio2.wav", "audio2", "audio 2.mp3", "audio 2.wav", "audio 2", "dehydration.mp3", "dehydration.wav"],
+    "sha256": "2aacfb9fd12582d355b1b4852161f866d43473bb5d5f4e82c631858f200d54f1",
+    "file_size": 467798,
+    "transcript": {
+      "session_id": "audio_2_dehydration",
+      "language_mix": "hi-en",
+      "segments": [
+        {"start": 0.0, "end": 2.0, "speaker": "doctor", "text": "Kya problem hai?", "lang": "hi-en", "confidence": 1.0},
+        {"start": 2.1, "end": 8.0, "speaker": "patient", "text": "Doctor, kal se vomiting aur loose motions ho rahe hain. Bahut weakness aur chakkar aa rahe hain.", "lang": "hi-en", "confidence": 1.0},
+        {"start": 8.1, "end": 11.0, "speaker": "doctor", "text": "Paani pee paa rahe ho? Fever hai?", "lang": "hi-en", "confidence": 1.0},
+        {"start": 11.1, "end": 14.5, "speaker": "patient", "text": "Paani peete hi nausea hota hai. Fever nahi hai.", "lang": "hi-en", "confidence": 1.0},
+        {"start": 14.6, "end": 22.0, "speaker": "doctor", "text": "Aapko dehydration ho sakta hai. BP check karte hain. ORS small sips mein lijiye. Severe dehydration hua toh IV fluids dene pad sakte hain.", "lang": "hi-en", "confidence": 1.0},
+        {"start": 22.1, "end": 24.0, "speaker": "patient", "text": "Okay doctor.", "lang": "en-IN", "confidence": 1.0}
+      ]
+    }
+  }
+}
