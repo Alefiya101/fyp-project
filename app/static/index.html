@@ -52,6 +52,11 @@
           <i class="ph-bold ph-shield-check"></i>
           <span>NRCES FHIR R4 Validated</span>
         </div>
+
+        <div class="topbar-badge badge-sandbox" id="abdm-sandbox-badge" title="ABDM Sandbox Gateway Status">
+          <i class="ph-bold ph-cloud"></i>
+          <span id="sandbox-status-text">ABDM Sandbox: Online</span>
+        </div>
       </div>
     </div>
   </header>
@@ -97,6 +102,65 @@
         <div class="meta-field">
           <span class="meta-label">TIME</span>
           <span class="meta-static-value" id="session-time-display">10:02 AM</span>
+        </div>
+      </div>
+
+      <!-- DOCTOR REVIEW & CLINICAL SIGN-OFF BAR -->
+      <div class="doctor-decision-bar" id="doctor-decision-bar">
+        <div class="decision-header">
+          <div class="decision-title-group">
+            <div class="decision-icon-wrap" id="decision-icon-wrap">
+              <i class="ph-duotone ph-signature" id="decision-main-icon"></i>
+            </div>
+            <div>
+              <div class="decision-label">CLINICIAN DECISION &bull; ABDM SIGN-OFF</div>
+              <div class="decision-status" id="decision-status-text">
+                <span class="status-indicator status-draft"></span> Draft Ready for Clinician Review
+              </div>
+            </div>
+          </div>
+          <div class="decision-actions" id="decision-actions">
+            <button id="btn-reject-consultation" class="btn btn-sm btn-reject" title="Doctor rejects the generated clinical draft">
+              <i class="ph-bold ph-x-circle"></i> Reject Record
+            </button>
+            <button id="btn-approve-consultation" class="btn btn-sm btn-approve" title="Doctor signs and approves consultation for ABDM Sandbox">
+              <i class="ph-bold ph-check-circle"></i> Approve &amp; Push to ABDM
+            </button>
+          </div>
+        </div>
+
+        <!-- Approved Details Box (Revealed upon approval) -->
+        <div class="approval-seal-details hidden" id="approval-seal-details">
+          <div class="seal-meta-grid">
+            <div class="seal-item">
+              <span class="seal-item-label">DIGITAL SIGNATURE (HMAC-SHA256)</span>
+              <span class="seal-item-val mono" id="seal-signature-display">Pending...</span>
+            </div>
+            <div class="seal-item">
+              <span class="seal-item-label">SIGNED BY</span>
+              <span class="seal-item-val" id="seal-doctor-display">Dr. Consulting Physician</span>
+            </div>
+            <div class="seal-item">
+              <span class="seal-item-label">ABDM SANDBOX CARE-CONTEXT</span>
+              <span class="seal-item-val" id="seal-care-context-display">OPD-live_consultation</span>
+            </div>
+            <div class="seal-item">
+              <span class="seal-item-label">GATEWAY SYNC STATUS</span>
+              <span class="seal-item-val sync-badge-active" id="seal-sync-status-display">Synced to ABDM Sandbox</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rejection Details Box (Revealed upon rejection) -->
+        <div class="rejection-details hidden" id="rejection-details">
+          <div class="rejection-alert">
+            <i class="ph-fill ph-prohibit rejection-icon"></i>
+            <div>
+              <strong>Record Rejected by Clinician:</strong>
+              <span id="rejection-reason-text">Rejected by doctor</span>
+              <span class="rejection-subtext">&bull; Record will not be synced to ABDM Gateway. You may re-edit or re-record to generate a new draft.</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -261,6 +325,9 @@
             <h3>FHIR R4 DOCUMENT BUNDLE</h3>
           </div>
           <div class="fhir-box-actions">
+            <button id="btn-validate-profile" class="btn-copy" title="Validate against ABDM OPConsultRecord Profiles">
+              <i class="ph-bold ph-shield-check"></i> Audit Profile
+            </button>
             <button id="btn-copy-fhir" class="btn-copy">
               <i class="ph-bold ph-copy"></i> Copy
             </button>
@@ -435,6 +502,58 @@
       <div class="modal-footer">
         <button class="btn btn-sm btn-ghost modal-cancel">Cancel</button>
         <button class="btn btn-sm btn-primary" id="btn-save-investigation">Add Lab Order</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Doctor Rejection Modal -->
+  <div class="modal-overlay hidden" id="modal-reject">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 style="color: #DC2626;"><i class="ph-bold ph-warning-octagon"></i> Doctor Rejection &bull; Clinical Review</h3>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.85rem; color: #475569; margin-bottom: 0.75rem;">
+          Rejecting this clinical draft will flag it as clinically inaccurate or unverified. It will not be synced to the ABDM Gateway.
+        </p>
+        <div class="form-group">
+          <label>Reason for Rejection</label>
+          <select id="select-reject-reason" style="width: 100%; border: 1px solid #CBD5E1; border-radius: 6px; padding: 0.5rem; font-family: inherit; font-size: 0.85rem; background: #fff;">
+            <option value="Incorrect symptoms or clinical findings identified">Incorrect symptoms or clinical findings identified</option>
+            <option value="Audio recording quality insufficient / speech recognition artifacts">Audio recording quality insufficient / speech recognition artifacts</option>
+            <option value="Medication, dose, or frequency requires correction">Medication, dose, or frequency requires correction</option>
+            <option value="Diagnosis mismatch or insufficient clinical basis">Diagnosis mismatch or insufficient clinical basis</option>
+            <option value="Mismatched patient identity">Mismatched patient identity</option>
+            <option value="Custom">Other (specify below)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Clinician Notes / Details</label>
+          <textarea id="input-reject-notes" rows="3" style="width: 100%; border: 1px solid #CBD5E1; border-radius: 6px; padding: 0.5rem; font-family: inherit; font-size: 0.85rem;" placeholder="Enter optional explanation for clinical audit log..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-sm btn-ghost modal-cancel">Cancel</button>
+        <button class="btn btn-sm btn-danger" id="btn-confirm-reject">Confirm Rejection</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ABDM Profile Audit Modal -->
+  <div class="modal-overlay hidden" id="modal-profile-audit">
+    <div class="modal-dialog" style="max-width: 640px;">
+      <div class="modal-header">
+        <h3><i class="ph-bold ph-shield-check" style="color: #2563EB;"></i> ABDM NRCES FHIR R4 Profile Conformance</h3>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="profile-audit-content" style="font-size: 0.85rem; color: #334155;">
+          Loading ABDM profile audit...
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-sm btn-primary modal-close-btn">Close</button>
       </div>
     </div>
   </div>

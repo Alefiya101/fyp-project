@@ -400,6 +400,7 @@ class FHIRMapper:
             "id": bundle_id,
             "resourceType": "Bundle",
             "type": "document",
+            "meta": {"profile": [ap.ABDM_OP_CONSULT_PROFILE]},
             "timestamp": iso_now,
             "entry": bundle_entries,
         }

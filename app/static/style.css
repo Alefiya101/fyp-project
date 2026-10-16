@@ -938,3 +938,243 @@ body {
   transform: translateY(0);
   opacity: 1;
 }
+
+/* ==========================================================================
+   Doctor Review & Clinical Decision Bar
+   ========================================================================== */
+
+.doctor-decision-bar {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-left: 4px solid #2563EB;
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  transition: all 0.2s ease;
+}
+
+.doctor-decision-bar.approved {
+  border-left-color: #10B981;
+  background: #F0FDF4;
+}
+
+.doctor-decision-bar.rejected {
+  border-left-color: #EF4444;
+  background: #FEF2F2;
+}
+
+.decision-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.decision-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.decision-icon-wrap {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  background: #EFF6FF;
+  color: #2563EB;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+}
+
+.doctor-decision-bar.approved .decision-icon-wrap {
+  background: #DCFCE7;
+  color: #10B981;
+}
+
+.doctor-decision-bar.rejected .decision-icon-wrap {
+  background: #FEE2E2;
+  color: #EF4444;
+}
+
+.decision-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #64748B;
+  text-transform: uppercase;
+}
+
+.decision-status {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #0F172A;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.status-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-indicator.status-draft {
+  background: #F59E0B;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+}
+
+.status-indicator.status-approved {
+  background: #10B981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+.status-indicator.status-rejected {
+  background: #EF4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+}
+
+.decision-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.btn-approve {
+  background: #059669;
+  color: #FFFFFF;
+  border: none;
+  font-weight: 600;
+  padding: 0.45rem 0.95rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  transition: all 0.15s ease;
+}
+
+.btn-approve:hover {
+  background: #047857;
+  box-shadow: 0 2px 4px rgba(5, 150, 105, 0.25);
+}
+
+.btn-reject {
+  background: #FFFFFF;
+  color: #DC2626;
+  border: 1px solid #FECACA;
+  font-weight: 600;
+  padding: 0.45rem 0.85rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  transition: all 0.15s ease;
+}
+
+.btn-reject:hover {
+  background: #FEF2F2;
+  border-color: #F87171;
+}
+
+/* Approval Seal Box */
+.approval-seal-details {
+  border-top: 1px solid #D1FAE5;
+  padding-top: 0.75rem;
+  animation: fadeIn 0.3s ease;
+}
+
+.seal-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.75rem;
+}
+
+.seal-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.seal-item-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #047857;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.seal-item-val {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #064E3B;
+  word-break: break-all;
+}
+
+.seal-item-val.mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+}
+
+.sync-badge-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: #047857;
+}
+
+/* Rejection Box */
+.rejection-details {
+  border-top: 1px solid #FEE2E2;
+  padding-top: 0.75rem;
+  animation: fadeIn 0.3s ease;
+}
+
+.rejection-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: #991B1B;
+}
+
+.rejection-icon {
+  font-size: 1.15rem;
+  color: #DC2626;
+  margin-top: 1px;
+}
+
+.rejection-subtext {
+  display: block;
+  font-size: 0.75rem;
+  color: #B91C1C;
+  margin-top: 0.2rem;
+}
+
+/* Sandbox Badge */
+.topbar-badge.badge-sandbox {
+  background: rgba(37, 99, 235, 0.08);
+  color: #1D4ED8;
+  border-color: rgba(37, 99, 235, 0.2);
+}
+
+.topbar-badge.badge-sandbox.online {
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}

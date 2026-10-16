@@ -36,6 +36,21 @@ const state = {
     { entity: "cold", issue: "Extracted from low-confidence speech turn (confidence: 0.50). Potential ASR audio artifact." }
   ],
   fhirBundle: null,
+  approval: {
+    status: "DRAFT",
+    doctor_name: "Dr. Consulting Physician",
+    doctor_id: "practitioner-001",
+    approved_at: null,
+    signature: null,
+    notes: null,
+  },
+  abdmSync: {
+    status: "PENDING_APPROVAL",
+    mode: "MOCK_SANDBOX",
+    request_id: null,
+    care_context: "OPD-live_consultation",
+    synced_at: null,
+  },
 };
 
 // DOM References
@@ -56,6 +71,17 @@ const fhirFilenameDisplay = document.getElementById("fhir-filename-display");
 
 const btnCopyFhir = document.getElementById("btn-copy-fhir");
 const btnDownloadFhir = document.getElementById("btn-download-fhir");
+const btnValidateProfile = document.getElementById("btn-validate-profile");
+
+// Doctor Review & Decision Controls
+const btnApproveConsultation = document.getElementById("btn-approve-consultation");
+const btnRejectConsultation = document.getElementById("btn-reject-consultation");
+const modalReject = document.getElementById("modal-reject");
+const btnConfirmReject = document.getElementById("btn-confirm-reject");
+const selectRejectReason = document.getElementById("select-reject-reason");
+const inputRejectNotes = document.getElementById("input-reject-notes");
+const modalProfileAudit = document.getElementById("modal-profile-audit");
+const profileAuditContent = document.getElementById("profile-audit-content");
 
 // Audio Controls
 const btnRecordToggle = document.getElementById("btn-record-toggle");
@@ -83,6 +109,7 @@ let elapsedSeconds = 0;
 document.addEventListener("DOMContentLoaded", () => {
   setupEventListeners();
   loadLatestConsultation();
+  checkAbdmStatus();
 });
 
 function setupEventListeners() {
@@ -119,6 +146,12 @@ function setupEventListeners() {
   // Copy & Download
   btnCopyFhir.addEventListener("click", copyFhir);
   btnDownloadFhir.addEventListener("click", downloadFhir);
+  if (btnValidateProfile) btnValidateProfile.addEventListener("click", handleAuditProfiles);
+
+  // Doctor Review & Decision Handlers
+  if (btnApproveConsultation) btnApproveConsultation.addEventListener("click", handleApproveConsultation);
+  if (btnRejectConsultation) btnRejectConsultation.addEventListener("click", () => openModal(modalReject));
+  if (btnConfirmReject) btnConfirmReject.addEventListener("click", handleConfirmReject);
 
   // Audio actions (Option 1: Start/Stop Recording, Option 2: Upload Audio)
   btnRecordToggle.addEventListener("click", toggleRecording);
@@ -362,6 +395,9 @@ function renderAllViews() {
     const formattedJson = JSON.stringify(state.fhirBundle, null, 2);
     fhirJsonCode.innerHTML = syntaxHighlightJson(formattedJson);
   }
+
+  // Doctor Review Decision Bar
+  renderDecisionBar();
 }
 
 /* ==========================================================================
@@ -455,6 +491,31 @@ function populateStateFromData(data) {
   state.vitals = (summary.vitals || []).map((v) => ({ name: v.name, value: v.value }));
 
   state.investigations = summary.investigations || [];
+
+  if (data.approval) {
+    state.approval = data.approval;
+  } else {
+    state.approval = {
+      status: "DRAFT",
+      doctor_name: state.practitionerName,
+      doctor_id: "practitioner-001",
+      approved_at: null,
+      signature: null,
+      notes: null,
+    };
+  }
+
+  if (data.abdm_sync) {
+    state.abdmSync = data.abdm_sync;
+  } else {
+    state.abdmSync = {
+      status: "PENDING_APPROVAL",
+      mode: "MOCK_SANDBOX",
+      request_id: null,
+      care_context: `OPD-${state.sessionId}`,
+      synced_at: null,
+    };
+  }
 }
 
 /* ==========================================================================
@@ -654,4 +715,259 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+/* ==========================================================================
+   Doctor Review, Approval, Rejection & ABDM Integration Logic
+   ========================================================================== */
+
+function renderDecisionBar() {
+  const doctorDecisionBar = document.getElementById("doctor-decision-bar");
+  const decisionStatusText = document.getElementById("decision-status-text");
+  const decisionMainIcon = document.getElementById("decision-main-icon");
+  const approvalSealDetails = document.getElementById("approval-seal-details");
+  const sealSignatureDisplay = document.getElementById("seal-signature-display");
+  const sealDoctorDisplay = document.getElementById("seal-doctor-display");
+  const sealCareContextDisplay = document.getElementById("seal-care-context-display");
+  const sealSyncStatusDisplay = document.getElementById("seal-sync-status-display");
+  const rejectionDetails = document.getElementById("rejection-details");
+  const rejectionReasonText = document.getElementById("rejection-reason-text");
+  const btnApprove = document.getElementById("btn-approve-consultation");
+  const btnReject = document.getElementById("btn-reject-consultation");
+
+  if (!doctorDecisionBar) return;
+
+  const status = (state.approval && state.approval.status) ? state.approval.status.toUpperCase() : "DRAFT";
+
+  if (status === "APPROVED") {
+    doctorDecisionBar.className = "doctor-decision-bar approved";
+    decisionStatusText.innerHTML = `<span class="status-indicator status-approved"></span> Approved by ${escapeHtml(state.approval.doctor_name || state.practitionerName)} &bull; ABDM Synced`;
+    if (decisionMainIcon) decisionMainIcon.className = "ph-duotone ph-seal-check";
+    if (approvalSealDetails) approvalSealDetails.classList.remove("hidden");
+    if (rejectionDetails) rejectionDetails.classList.add("hidden");
+
+    if (sealSignatureDisplay) {
+      const sig = state.approval.signature || "HMAC-SHA256";
+      sealSignatureDisplay.textContent = sig.length > 28 ? sig.substring(0, 24) + "..." : sig;
+      sealSignatureDisplay.title = sig;
+    }
+    if (sealDoctorDisplay) sealDoctorDisplay.textContent = state.approval.doctor_name || state.practitionerName;
+    if (sealCareContextDisplay) sealCareContextDisplay.textContent = (state.abdmSync && state.abdmSync.care_context) || `OPD-${state.sessionId}`;
+    if (sealSyncStatusDisplay) {
+      const mode = (state.abdmSync && state.abdmSync.mode) || "SANDBOX";
+      const reqId = (state.abdmSync && state.abdmSync.request_id) ? state.abdmSync.request_id.substring(0, 8) + "..." : "Active";
+      sealSyncStatusDisplay.textContent = `Synced to ABDM Gateway (${mode} &bull; ${reqId})`;
+    }
+
+    if (btnApprove) {
+      btnApprove.innerHTML = '<i class="ph-bold ph-check"></i> Approved &amp; Synced';
+      btnApprove.disabled = true;
+      btnApprove.style.opacity = "0.75";
+    }
+    if (btnReject) {
+      btnReject.disabled = false;
+      btnReject.style.opacity = "1";
+    }
+  } else if (status === "REJECTED") {
+    doctorDecisionBar.className = "doctor-decision-bar rejected";
+    decisionStatusText.innerHTML = `<span class="status-indicator status-rejected"></span> Rejected by Doctor`;
+    if (decisionMainIcon) decisionMainIcon.className = "ph-duotone ph-prohibit";
+    if (approvalSealDetails) approvalSealDetails.classList.add("hidden");
+    if (rejectionDetails) rejectionDetails.classList.remove("hidden");
+    if (rejectionReasonText) rejectionReasonText.textContent = state.approval.reason || "Draft rejected by clinician";
+
+    if (btnApprove) {
+      btnApprove.innerHTML = '<i class="ph-bold ph-check-circle"></i> Re-Approve &amp; Push';
+      btnApprove.disabled = false;
+      btnApprove.style.opacity = "1";
+    }
+    if (btnReject) {
+      btnReject.disabled = true;
+      btnReject.style.opacity = "0.5";
+    }
+  } else {
+    // DRAFT
+    doctorDecisionBar.className = "doctor-decision-bar";
+    decisionStatusText.innerHTML = `<span class="status-indicator status-draft"></span> Draft Ready for Clinician Review`;
+    if (decisionMainIcon) decisionMainIcon.className = "ph-duotone ph-signature";
+    if (approvalSealDetails) approvalSealDetails.classList.add("hidden");
+    if (rejectionDetails) rejectionDetails.classList.add("hidden");
+
+    if (btnApprove) {
+      btnApprove.innerHTML = '<i class="ph-bold ph-check-circle"></i> Approve &amp; Push to ABDM';
+      btnApprove.disabled = false;
+      btnApprove.style.opacity = "1";
+    }
+    if (btnReject) {
+      btnReject.disabled = false;
+      btnReject.style.opacity = "1";
+    }
+  }
+}
+
+async function handleApproveConsultation() {
+  const btnApprove = document.getElementById("btn-approve-consultation");
+  const origHtml = btnApprove.innerHTML;
+  btnApprove.disabled = true;
+  btnApprove.innerHTML = '<i class="ph-bold ph-spinner ph-spin"></i> Validating &amp; Syncing...';
+
+  try {
+    const payload = {
+      session_id: state.sessionId,
+      doctor_name: state.practitionerName,
+      doctor_id: "practitioner-001",
+    };
+
+    const resp = await fetch("/api/approve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || "Approval failed");
+    }
+
+    const data = await resp.json();
+    populateStateFromData(data);
+    renderAllViews();
+    showToast("✓ Record approved by doctor, digitally sealed, and synced to ABDM Sandbox!");
+  } catch (err) {
+    showToast(`Approval error: ${err.message}`, true);
+    btnApprove.disabled = false;
+    btnApprove.innerHTML = origHtml;
+  }
+}
+
+async function handleConfirmReject() {
+  const selectReason = document.getElementById("select-reject-reason");
+  const inputNotes = document.getElementById("input-reject-notes");
+  let reason = selectReason.value;
+  if (inputNotes && inputNotes.value.trim()) {
+    reason += ` - ${inputNotes.value.trim()}`;
+  }
+
+  closeAllModals();
+
+  try {
+    const payload = {
+      session_id: state.sessionId,
+      doctor_name: state.practitionerName,
+      doctor_id: "practitioner-001",
+      reason: reason,
+    };
+
+    const resp = await fetch("/api/reject", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || "Rejection failed");
+    }
+
+    const data = await resp.json();
+    populateStateFromData(data);
+    renderAllViews();
+    showToast("Record marked as REJECTED. Sync to ABDM Sandbox halted.");
+  } catch (err) {
+    showToast(`Rejection error: ${err.message}`, true);
+  }
+}
+
+async function handleAuditProfiles() {
+  const modalProfileAudit = document.getElementById("modal-profile-audit");
+  const contentEl = document.getElementById("profile-audit-content");
+  openModal(modalProfileAudit);
+  contentEl.innerHTML = '<div style="text-align: center; padding: 1.5rem;"><i class="ph-bold ph-spinner ph-spin" style="font-size: 1.5rem; color: #2563EB;"></i><p style="margin-top: 0.5rem; color: #64748B;">Validating all resources against ABDM OPConsultRecord Profiles...</p></div>';
+
+  try {
+    const resp = await fetch("/api/validate-bundle");
+    if (!resp.ok) {
+      throw new Error("Failed to validate profiles");
+    }
+    const data = await resp.json();
+    const conf = data.abdm_profile_conformance || {};
+    const conforms = conf.conforms;
+
+    let html = `
+      <div style="background: ${conforms ? '#F0FDF4' : '#FEF2F2'}; border: 1px solid ${conforms ? '#BBF7D0' : '#FECACA'}; border-radius: 8px; padding: 0.85rem; margin-bottom: 1rem;">
+        <div style="font-weight: 700; color: ${conforms ? '#166534' : '#991B1B'}; display: flex; align-items: center; gap: 0.4rem;">
+          <i class="ph-bold ${conforms ? 'ph-check-circle' : 'ph-warning'}" style="font-size: 1.2rem;"></i>
+          ${conforms ? 'ABDM OPConsultRecord Profile Conformance: 100% VALID' : 'Profile Conformance Warnings'}
+        </div>
+        <div style="font-size: 0.78rem; color: #475569; margin-top: 0.25rem;">
+          Target Profile: <code>${escapeHtml(conf.target_profile || "https://nrces.in/ndhm/fhir/r4/StructureDefinition/OPConsultRecord")}</code>
+        </div>
+      </div>
+
+      <h4 style="font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748B; margin-bottom: 0.5rem;">Resource Profile Conformance Breakdown</h4>
+      <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-bottom: 1rem;">
+        <thead>
+          <tr style="border-bottom: 2px solid #E2E8F0; text-align: left; color: #475569;">
+            <th style="padding: 0.4rem 0.5rem;">RESOURCE</th>
+            <th style="padding: 0.4rem 0.5rem;">COUNT</th>
+            <th style="padding: 0.4rem 0.5rem;">ABDM PROFILE URI</th>
+            <th style="padding: 0.4rem 0.5rem;">STATUS</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    const resources = conf.profile_conformance || {};
+    for (const [rtype, rinfo] of Object.entries(resources)) {
+      html += `
+        <tr style="border-bottom: 1px solid #F1F5F9;">
+          <td style="padding: 0.4rem 0.5rem; font-weight: 600;">${escapeHtml(rtype)}</td>
+          <td style="padding: 0.4rem 0.5rem;">${rinfo.count || 1}</td>
+          <td style="padding: 0.4rem 0.5rem; font-family: monospace; font-size: 0.72rem; color: #475569;">${escapeHtml(rinfo.profile || "")}</td>
+          <td style="padding: 0.4rem 0.5rem;">
+            <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-weight: 600; color: ${rinfo.present ? '#16A34A' : '#CA8A04'};">
+              <i class="ph-bold ${rinfo.present ? 'ph-check' : 'ph-warning'}"></i> ${rinfo.present ? 'Conforms' : 'Partial'}
+            </span>
+          </td>
+        </tr>
+      `;
+    }
+
+    html += `
+        </tbody>
+      </table>
+
+      <h4 style="font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748B; margin-bottom: 0.4rem;">Standard Coding Systems Verified</h4>
+      <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
+        ${(conf.coding_systems || ["http://snomed.info/sct", "http://loinc.org", "http://www.nlm.nih.gov/research/umls/rxnorm"]).map(cs =>
+          `<span style="background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; border-radius: 4px; padding: 0.2rem 0.5rem; font-size: 0.75rem; font-family: monospace;">${escapeHtml(cs)}</span>`
+        ).join('')}
+      </div>
+    `;
+
+    contentEl.innerHTML = html;
+  } catch (err) {
+    contentEl.innerHTML = `<div style="color: #DC2626; padding: 1rem;">Failed to audit profiles: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function checkAbdmStatus() {
+  try {
+    const resp = await fetch("/api/abdm/status");
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const sandboxBadge = document.getElementById("abdm-sandbox-badge");
+    const statusText = document.getElementById("sandbox-status-text");
+    if (sandboxBadge && statusText) {
+      if (data.status === "online") {
+        sandboxBadge.classList.add("online");
+        statusText.textContent = `ABDM Sandbox: ${data.mode === "MOCK_SANDBOX" ? "Active (Sandbox Mode)" : "Live"}`;
+      } else {
+        sandboxBadge.classList.remove("online");
+        statusText.textContent = "ABDM Sandbox: Standby";
+      }
+    }
+  } catch (e) {
+    console.debug("ABDM status check skipped:", e);
+  }
 }

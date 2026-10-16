@@ -144,8 +144,6 @@ class MedicalTranscriptNormalizer:
             for seg in transcript.get("segments", []):
                 raw_text = seg.get("text", "") if isinstance(seg, dict) else seg.text
                 cleaned_text = self.normalize_sentence(raw_text)
-                if not cleaned_text:
-                    continue
                 new_seg = dict(seg) if isinstance(seg, dict) else seg.model_dump()
                 new_seg["text"] = cleaned_text
                 normalized_segments.append(new_seg)

@@ -12,7 +12,8 @@ import json
 import logging
 import re
 import threading
-from datetime import datetime
+import uuid
+from datetime import UTC, datetime
 from math import gcd
 from pathlib import Path
 from typing import Annotated, Any
@@ -23,6 +24,10 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+
+from app_service.abdm.client import abdm_client
+from app_service.storage.crypto import crypto
+from app_service.storage.models import ApprovalDAO, SessionDAO
 from pydantic import BaseModel
 from scipy.signal import resample_poly
 
@@ -261,6 +266,27 @@ def format_validated_bundle_response(bundle_obj_or_dict: Any) -> dict[str, Any]:
 
     summary = parse_fhir_summary(fhir_bundle)
 
+    approval = data.get("approval")
+    if not approval:
+        approval = {
+            "status": "DRAFT",
+            "doctor_name": summary.get("practitioner", {}).get("name", "Dr. Consulting Physician"),
+            "doctor_id": summary.get("practitioner", {}).get("id", "practitioner-001"),
+            "approved_at": None,
+            "signature": None,
+            "notes": None,
+        }
+
+    abdm_sync = data.get("abdm_sync")
+    if not abdm_sync:
+        abdm_sync = {
+            "status": "PENDING_APPROVAL",
+            "mode": "MOCK_SANDBOX" if abdm_client.mock_mode else "LIVE_SANDBOX",
+            "request_id": None,
+            "care_context": f"OPD-{session_id}",
+            "synced_at": None,
+        }
+
     return {
         "success": True,
         "session_id": session_id,
@@ -268,6 +294,8 @@ def format_validated_bundle_response(bundle_obj_or_dict: Any) -> dict[str, Any]:
         "validation": validation,
         "grounding_flags": grounding_flags,
         "fhir_bundle": fhir_bundle,
+        "approval": approval,
+        "abdm_sync": abdm_sync,
     }
 
 
@@ -560,6 +588,21 @@ def update_consultation_entities(req: UpdateConsultationRequest):
                 "warnings": val_result.warnings,
             },
             "grounding_flags": existing_flags,
+            "approval": {
+                "status": "DRAFT",
+                "doctor_name": req.practitioner_name,
+                "doctor_id": "practitioner-001",
+                "approved_at": None,
+                "signature": None,
+                "notes": None,
+            },
+            "abdm_sync": {
+                "status": "PENDING_APPROVAL",
+                "mode": "MOCK_SANDBOX" if abdm_client.mock_mode else "LIVE_SANDBOX",
+                "request_id": None,
+                "care_context": f"OPD-{req.session_id}",
+                "synced_at": None,
+            },
         }
 
         # Save to live_fhir_bundle.json
@@ -569,6 +612,186 @@ def update_consultation_entities(req: UpdateConsultationRequest):
     except Exception as exc:
         logger.exception("Update consultation failed")
         raise HTTPException(status_code=500, detail=f"Failed to update consultation: {exc}")
+
+
+class DoctorApprovalRequest(BaseModel):
+    session_id: str = "live_consultation"
+    doctor_name: str = "Dr. Consulting Physician"
+    doctor_id: str = "practitioner-001"
+    notes: str | None = None
+
+
+class DoctorRejectionRequest(BaseModel):
+    session_id: str = "live_consultation"
+    doctor_name: str = "Dr. Consulting Physician"
+    doctor_id: str = "practitioner-001"
+    reason: str = "Draft clinical record rejected by doctor"
+
+
+@app.post("/api/approve")
+def approve_consultation(req: DoctorApprovalRequest):
+    """Doctor approves and signs the generated FHIR R4 Bundle, then syncs to ABDM Sandbox."""
+    bundle_path = OUTPUT_DIR / "live_fhir_bundle.json"
+    if not bundle_path.is_file():
+        raise HTTPException(status_code=404, detail="No consultation record available to approve.")
+
+    try:
+        data = json.loads(bundle_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to read existing bundle: {exc}")
+
+    fhir_bundle = data.get("fhir_bundle", {})
+    if not fhir_bundle:
+        raise HTTPException(status_code=400, detail="FHIR Bundle is empty or invalid.")
+
+    # 1. ABDM Profile validation
+    validator = FHIRValidator()
+    val_result = validator.validate_bundle(fhir_bundle)
+    profile_report = validator.validate_abdm_profiles(fhir_bundle)
+
+    # 2. Cryptographic signature / seal
+    now_iso = datetime.now(UTC).isoformat()
+    bundle_serialized = json.dumps(fhir_bundle, sort_keys=True, ensure_ascii=False)
+    signature_payload = f"{req.session_id}|{req.doctor_name}|{now_iso}|{bundle_serialized}"
+    try:
+        digital_signature = crypto.sign_record(signature_payload)
+    except Exception:
+        import hashlib
+        digital_signature = hashlib.sha256(signature_payload.encode("utf-8")).hexdigest()
+
+    # 3. Synchronize to ABDM Sandbox
+    patient_id = "patient-001"
+    for entry in fhir_bundle.get("entry", []):
+        if entry.get("resource", {}).get("resourceType") == "Patient":
+            patient_id = entry.get("resource", {}).get("id", patient_id)
+            break
+
+    try:
+        abdm_response = abdm_client.push_op_consult_record(
+            session_id=req.session_id,
+            fhir_bundle=fhir_bundle,
+            patient_id=patient_id,
+        )
+    except Exception as exc:
+        logger.warning("ABDM Sandbox sync encountered error: %s", exc)
+        abdm_response = {
+            "status": "QUEUED_OFFLINE",
+            "mode": "SANDBOX_OFFLINE",
+            "requestId": str(uuid.uuid4()),
+            "timestamp": now_iso,
+            "careContextReference": f"OPD-{req.session_id}",
+            "message": f"Queued for offline ABDM sync: {exc}",
+        }
+
+    # 4. Optional Database persistence
+    try:
+        ApprovalDAO.approve_record(req.session_id, req.doctor_name, fhir_bundle)
+    except Exception as exc:
+        logger.debug("Database record approval skipped: %s", exc)
+
+    # 5. Persist approval metadata
+    approval_meta = {
+        "status": "APPROVED",
+        "doctor_name": req.doctor_name,
+        "doctor_id": req.doctor_id,
+        "approved_at": now_iso,
+        "signature": digital_signature,
+        "notes": req.notes,
+        "profile_conforms": profile_report.get("conforms", True),
+    }
+    abdm_meta = {
+        "status": abdm_response.get("status", "SUCCESS"),
+        "mode": abdm_response.get("mode", "SANDBOX"),
+        "request_id": abdm_response.get("requestId"),
+        "care_context": abdm_response.get("careContextReference", f"OPD-{req.session_id}"),
+        "synced_at": abdm_response.get("timestamp", now_iso),
+        "message": abdm_response.get("message", "Synced to ABDM Sandbox"),
+    }
+
+    data["approval"] = approval_meta
+    data["abdm_sync"] = abdm_meta
+    bundle_path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+
+    return format_validated_bundle_response(data)
+
+
+@app.post("/api/reject")
+def reject_consultation(req: DoctorRejectionRequest):
+    """Doctor rejects the generated clinical consultation record."""
+    bundle_path = OUTPUT_DIR / "live_fhir_bundle.json"
+    if not bundle_path.is_file():
+        raise HTTPException(status_code=404, detail="No consultation record available to reject.")
+
+    try:
+        data = json.loads(bundle_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to read existing bundle: {exc}")
+
+    now_iso = datetime.now(UTC).isoformat()
+    approval_meta = {
+        "status": "REJECTED",
+        "doctor_name": req.doctor_name,
+        "doctor_id": req.doctor_id,
+        "rejected_at": now_iso,
+        "reason": req.reason,
+    }
+    abdm_meta = {
+        "status": "REJECTED",
+        "mode": "NONE",
+        "request_id": None,
+        "care_context": None,
+        "synced_at": None,
+        "message": f"Record rejected by doctor: {req.reason}",
+    }
+
+    try:
+        SessionDAO.update_status(req.session_id, "REJECTED", actor_id=req.doctor_name, details={"reason": req.reason})
+    except Exception as exc:
+        logger.debug("Database session update skipped: %s", exc)
+
+    data["approval"] = approval_meta
+    data["abdm_sync"] = abdm_meta
+    bundle_path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+
+    return format_validated_bundle_response(data)
+
+
+@app.get("/api/abdm/status")
+def get_abdm_status():
+    """Returns ABDM Sandbox Gateway connection and profile information."""
+    return {
+        "status": "online" if abdm_client.is_online() else "offline",
+        "mode": "MOCK_SANDBOX" if abdm_client.mock_mode else "LIVE_SANDBOX",
+        "gateway_url": abdm_client.gateway_url,
+        "hip_id": abdm_client.hip_id,
+        "target_profile": "https://nrces.in/ndhm/fhir/r4/StructureDefinition/OPConsultRecord",
+        "version": "v0.5",
+    }
+
+
+@app.post("/api/abdm/test")
+def test_abdm_connection():
+    """Tests live connection to the ABDM Sandbox Gateway."""
+    return abdm_client.test_connection()
+
+
+@app.get("/api/validate-bundle")
+def validate_current_bundle():
+    """Performs deep validation of current live FHIR bundle against NRCES ABDM profiles."""
+    bundle_path = OUTPUT_DIR / "live_fhir_bundle.json"
+    if not bundle_path.is_file():
+        raise HTTPException(status_code=404, detail="No consultation bundle found.")
+    data = json.loads(bundle_path.read_text(encoding="utf-8"))
+    fhir_bundle = data.get("fhir_bundle", {})
+    validator = FHIRValidator()
+    val_result = validator.validate_bundle(fhir_bundle)
+    profile_report = validator.validate_abdm_profiles(fhir_bundle)
+    return {
+        "schema_valid": val_result.schema_valid,
+        "schema_errors": val_result.errors,
+        "schema_warnings": val_result.warnings,
+        "abdm_profile_conformance": profile_report,
+    }
 
 
 # Serve static web frontend

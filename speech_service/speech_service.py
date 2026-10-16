@@ -83,8 +83,8 @@ class SpeechService:
         num_speakers: int = 2,
         vad_threshold: float = 0.6,
         lexicon_path: str | None = None,
-        language: str | None = "hi",
-        beam_size: int = 5,
+        language: str | None = None,
+        beam_size: int = 1,
     ) -> None:
         self._model_size = model_size
         if compute_type != "float32":
@@ -258,10 +258,10 @@ class SpeechService:
                 ))
                 continue
 
-            # Feed the 16 kHz waveform directly to the Transformers processor.
+            # Feed the 16 kHz waveform directly to the ASR model.
             initial_prompt = self._get_initial_prompt()
             try:
-                if hasattr(model, "transcribe"):
+                if not hasattr(model, "generate") and hasattr(model, "transcribe"):
                     # faster-whisper backend
                     asr_segs, _ = model.transcribe(
                         chunk,
@@ -290,7 +290,7 @@ class SpeechService:
                     input_features = inputs.input_features.to(model.device)
                     generation_kwargs = {
                         "task": "transcribe",
-                        "language": self._language or "en",
+                        "language": self._language,
                         "num_beams": self._beam_size or 1,
                         "repetition_penalty": 1.15,
                         "no_repeat_ngram_size": 3,
@@ -306,22 +306,31 @@ class SpeechService:
                     with torch.inference_mode():
                         output = model.generate(input_features, **generation_kwargs)
 
-                    seq = output.sequences[0]
-                    start_token = processor.tokenizer.convert_tokens_to_ids("<|startoftranscript|>")
-                    matches = (seq == start_token).nonzero(as_tuple=True)[0]
-                    if len(matches) > 0:
-                        actual_tokens = seq[matches[0] + 1 :]
-                        text = processor.decode(
-                            actual_tokens,
-                            skip_special_tokens=True,
-                            clean_up_tokenization_spaces=False,
-                        ).strip()
+                    seqs = getattr(output, "sequences", None)
+                    if seqs is not None and hasattr(seqs, "__getitem__") and hasattr(processor, "tokenizer"):
+                        seq = seqs[0]
+                        start_token = processor.tokenizer.convert_tokens_to_ids("<|startoftranscript|>")
+                        matches = (seq == start_token).nonzero(as_tuple=True)[0] if hasattr(seq, "nonzero") else []
+                        if len(matches) > 0:
+                            actual_tokens = seq[matches[0] + 1 :]
+                            text = processor.decode(
+                                actual_tokens,
+                                skip_special_tokens=True,
+                                clean_up_tokenization_spaces=False,
+                            ).strip()
+                        else:
+                            text = processor.decode(
+                                seq,
+                                skip_special_tokens=True,
+                                clean_up_tokenization_spaces=False,
+                            ).strip()
+                    elif hasattr(processor, "batch_decode"):
+                        decoded_list = processor.batch_decode(seqs, skip_special_tokens=True)
+                        text = decoded_list[0].strip() if decoded_list else ""
+                    elif hasattr(processor, "decode"):
+                        text = processor.decode(seqs, skip_special_tokens=True).strip()
                     else:
-                        text = processor.decode(
-                            seq,
-                            skip_special_tokens=True,
-                            clean_up_tokenization_spaces=False,
-                        ).strip()
+                        text = ""
                     if output.scores:
                         token_scores = model.compute_transition_scores(
                             output.sequences, output.scores, normalize_logits=True
@@ -479,15 +488,7 @@ def _segment_to_dict(ts: TranscriptSegment) -> dict:
 
 
 def _build_transcript_json(session_id: str, segments: list[TranscriptSegment]) -> dict:
-    import re
-    valid_segments = []
-    for s in segments:
-        clean = re.sub(r"^[\s,\.\?\-_]+$", "", s.text).strip() if s.text else ""
-        if clean:
-            s.text = clean
-            valid_segments.append(s)
-
-    seg_dicts = [_segment_to_dict(s) for s in valid_segments]
+    seg_dicts = [_segment_to_dict(s) for s in segments]
 
     if seg_dicts:
         lang_counts: Counter = Counter(s["lang"] for s in seg_dicts)
