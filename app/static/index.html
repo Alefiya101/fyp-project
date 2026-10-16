@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="ABDM Ambient Clinical Scribing Studio - Indian OPD Doctor-Patient Scribing with local SLMs and FHIR R4 compliance.">
+  <title>ABDM Ambient Scribing Studio | Indian OPD Clinical AI</title>
+  
+  <!-- Modern Typography from Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Phosphor Icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <!-- Ambient background glow elements -->
+  <div class="glow-orb orb-1"></div>
+  <div class="glow-orb orb-2"></div>
+  <div class="glow-orb orb-3"></div>
+
+  <!-- Top Navigation Header -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand">
+        <div class="brand-icon">
+          <i class="ph-duotone ph-stethoscope"></i>
+        </div>
+        <div class="brand-text">
+          <h1>ABDM Scribe Studio</h1>
+          <span class="subtext">Indian OPD Ambient Clinical AI &amp; FHIR R4 Mapper</span>
+        </div>
+      </div>
+      
+      <div class="header-badges">
+        <div class="badge badge-abdm" id="badge-abdm" title="Compliant with National Resource Centre for EHR Standards">
+          <i class="ph-bold ph-shield-check"></i>
+          <span>ABDM OPConsultRecord R4</span>
+        </div>
+        <div class="badge badge-model" id="badge-model">
+          <span class="status-dot"></span>
+          <span>Qwen2.5-1.5B Refiner</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Layout -->
+  <main class="main-container">
+    
+    <!-- Audio Scribing Console Card -->
+    <section class="scribe-console-card">
+      <div class="console-header">
+        <div class="console-title">
+          <i class="ph-duotone ph-microphone"></i>
+          <h2>Ambient Consultation Capture</h2>
+        </div>
+        <div class="console-actions">
+          <button id="btn-load-latest" class="btn btn-secondary">
+            <i class="ph-bold ph-clock-counter-clockwise"></i>
+            <span>Load Latest Session</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="console-body">
+        <!-- Interactive Recording Panel -->
+        <div class="record-panel">
+          <div class="record-center">
+            <div class="mic-pulse-ring" id="mic-pulse-ring">
+              <button id="btn-record-toggle" class="btn-record-main" aria-label="Toggle Recording">
+                <i class="ph-fill ph-microphone" id="mic-icon"></i>
+              </button>
+            </div>
+            <div class="record-timer" id="record-timer">00:00</div>
+            <p class="record-instruction" id="record-instruction">Click microphone to start live consultation capture</p>
+          </div>
+
+          <div class="audio-waveform-visualizer" id="waveform-visualizer">
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+          </div>
+
+          <div class="record-options-row">
+            <div class="option-pill">
+              <label for="record-duration-select">Timed Record:</label>
+              <select id="record-duration-select">
+                <option value="10">10 Seconds</option>
+                <option value="15" selected>15 Seconds</option>
+                <option value="30">30 Seconds</option>
+                <option value="60">60 Seconds</option>
+              </select>
+              <button id="btn-timed-record" class="btn btn-sm btn-outline">
+                <i class="ph-bold ph-play"></i> Start Timed
+              </button>
+            </div>
+
+            <div class="divider-text">OR</div>
+
+            <div class="file-upload-box">
+              <input type="file" id="audio-file-input" accept=".wav,.mp3,.m4a" class="file-input-hidden">
+              <button id="btn-upload-file" class="btn btn-sm btn-outline">
+                <i class="ph-bold ph-upload-simple"></i> Upload Audio File
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pipeline Progress Stepper -->
+        <div class="pipeline-stepper" id="pipeline-stepper">
+          <div class="step-item" id="step-vad">
+            <div class="step-dot"><i class="ph-bold ph-waveform"></i></div>
+            <div class="step-label">VAD Speech Detection</div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-item" id="step-asr">
+            <div class="step-dot"><i class="ph-bold ph-translate"></i></div>
+            <div class="step-label">Whisper ASR</div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-item" id="step-llm">
+            <div class="step-dot"><i class="ph-bold ph-sparkle"></i></div>
+            <div class="step-label">Qwen2.5-1.5B Refiner</div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-item" id="step-fhir">
+            <div class="step-dot"><i class="ph-bold ph-file-code"></i></div>
+            <div class="step-label">ABDM FHIR R4 Bundle</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Consultation Summary Banner -->
+    <section class="consultation-meta-card" id="consultation-meta-card">
+      <div class="meta-item">
+        <span class="meta-label">Session ID</span>
+        <span class="meta-value" id="meta-session-id">LIVE_SESSION_01</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Patient</span>
+        <span class="meta-value" id="meta-patient-name">Patient S001</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Practitioner</span>
+        <span class="meta-value" id="meta-practitioner-name">Dr. Sharma (OPD General)</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">ABDM Validation</span>
+        <span class="meta-status status-valid" id="meta-abdm-status">
+          <i class="ph-bold ph-check-circle"></i> Schema Valid
+        </span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Clinical Grounding</span>
+        <span class="meta-status" id="meta-grounding-status">
+          <i class="ph-bold ph-shield-check"></i> Verified
+        </span>
+      </div>
+    </section>
+
+    <!-- Grounding Warnings Box (if any) -->
+    <section class="grounding-alerts-card hidden" id="grounding-alerts-card">
+      <div class="alert-card-header">
+        <i class="ph-fill ph-warning-circle"></i>
+        <h3>Clinical Safety &amp; Grounding Guardrails</h3>
+        <span class="alert-count-pill" id="alert-count-pill">0 Flags</span>
+      </div>
+      <div class="alert-card-body" id="grounding-alerts-list">
+        <!-- Rendered dynamically -->
+      </div>
+    </section>
+
+    <!-- EMR Prescription & Structured Clinical View -->
+    <div class="clinical-grid">
+      
+      <!-- Chief Complaints & Symptoms -->
+      <div class="emr-card">
+        <div class="card-header">
+          <div class="card-title">
+            <div class="card-icon icon-symptom">
+              <i class="ph-duotone ph-thermometer-hot"></i>
+            </div>
+            <h3>Chief Complaints &amp; Symptoms</h3>
+          </div>
+          <span class="badge-count" id="count-symptoms">0</span>
+        </div>
+        <div class="card-body" id="container-symptoms">
+          <div class="empty-state">No symptoms recorded in this session.</div>
+        </div>
+      </div>
+
+      <!-- Prescribed Medications -->
+      <div class="emr-card">
+        <div class="card-header">
+          <div class="card-title">
+            <div class="card-icon icon-med">
+              <i class="ph-duotone ph-pill"></i>
+            </div>
+            <h3>Prescribed Medications</h3>
+          </div>
+          <span class="badge-count" id="count-medications">0</span>
+        </div>
+        <div class="card-body" id="container-medications">
+          <div class="empty-state">No medications prescribed in this session.</div>
+        </div>
+      </div>
+
+      <!-- Vitals & Observations -->
+      <div class="emr-card">
+        <div class="card-header">
+          <div class="card-title">
+            <div class="card-icon icon-vital">
+              <i class="ph-duotone ph-heartbeat"></i>
+            </div>
+            <h3>Vitals &amp; Clinical Observations</h3>
+          </div>
+          <span class="badge-count" id="count-vitals">0</span>
+        </div>
+        <div class="card-body" id="container-vitals">
+          <div class="empty-state">No vitals observed in this session.</div>
+        </div>
+      </div>
+
+      <!-- Encounter Diagnoses -->
+      <div class="emr-card">
+        <div class="card-header">
+          <div class="card-title">
+            <div class="card-icon icon-diagnosis">
+              <i class="ph-duotone ph-stethoscope"></i>
+            </div>
+            <h3>Provisional Diagnoses</h3>
+          </div>
+          <span class="badge-count" id="count-diagnoses">0</span>
+        </div>
+        <div class="card-body" id="container-diagnoses">
+          <div class="empty-state">No diagnoses recorded in this session.</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ABDM FHIR R4 Bundle Explorer -->
+    <section class="fhir-explorer-card">
+      <div class="fhir-header">
+        <div class="fhir-title">
+          <i class="ph-duotone ph-code"></i>
+          <div>
+            <h2>ABDM OPConsultRecord FHIR R4 Bundle</h2>
+            <span class="fhir-profile-tag">https://nrces.in/ndhm/fhir/r4/StructureDefinition/OPConsultRecord</span>
+          </div>
+        </div>
+        
+        <div class="fhir-actions">
+          <div class="resource-pills" id="resource-pills">
+            <!-- Dynamically populated resource counters -->
+          </div>
+          <button id="btn-copy-fhir" class="btn btn-sm btn-outline">
+            <i class="ph-bold ph-copy"></i> Copy JSON
+          </button>
+          <button id="btn-download-fhir" class="btn btn-sm btn-primary">
+            <i class="ph-bold ph-download-simple"></i> Download Bundle
+          </button>
+        </div>
+      </div>
+
+      <div class="fhir-body">
+        <div class="fhir-code-wrapper">
+          <pre><code id="fhir-json-code" class="language-json">/* Load or record a consultation to inspect the generated ABDM FHIR R4 bundle */</code></pre>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="app-footer">
+    <div class="footer-container">
+      <p>ABDM Indian OPD Ambient Scribing System &bull; Powered by Whisper ASR, Qwen2.5-1.5B Refiner, and NRCES FHIR R4 Profiles.</p>
+    </div>
+  </footer>
+
+  <!-- Notification Toast -->
+  <div id="toast" class="toast"></div>
+
+  <!-- Client Application Logic -->
+  <script src="/static/app.js"></script>
+</body>
+</html>
