@@ -60,7 +60,7 @@ class GroundingChecker:
 
         # 1. Verify Symptoms
         for idx, sym in enumerate(extraction.entities.symptoms):
-            entity_tag = f"symptoms[{idx}]"
+            entity_tag = sym.text.strip() if sym.text and sym.text.strip() else f"Symptom #{idx + 1}"
             if not sym.source_segments:
                 flags.append(
                     GroundingFlag(
@@ -100,7 +100,7 @@ class GroundingChecker:
 
         # 2. Verify Diagnoses
         for idx, diag in enumerate(extraction.entities.diagnosis):
-            entity_tag = f"diagnosis[{idx}]"
+            entity_tag = diag.text.strip() if diag.text and diag.text.strip() else f"Diagnosis #{idx + 1}"
             if not diag.source_segments:
                 flags.append(
                     GroundingFlag(
@@ -115,7 +115,7 @@ class GroundingChecker:
 
         # 3. Verify Medications
         for idx, med in enumerate(extraction.entities.medications):
-            entity_tag = f"medications[{idx}]"
+            entity_tag = med.name.strip() if med.name and med.name.strip() else f"Medication #{idx + 1}"
             if not med.source_segments:
                 flags.append(
                     GroundingFlag(
@@ -179,7 +179,7 @@ class GroundingChecker:
 
         # 4. Verify Vitals
         for idx, vit in enumerate(extraction.entities.vitals):
-            entity_tag = f"vitals[{idx}]"
+            entity_tag = vit.type.strip() if vit.type and vit.type.strip() else f"Vital #{idx + 1}"
             if not vit.source_segments:
                 flags.append(
                     GroundingFlag(
