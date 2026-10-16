@@ -57,3 +57,10 @@ recordings/
 *.wav
 *.mp3
 scratch/
+
+# Local App Service Data, DB, and Secret Keys
+*.db
+*.db-wal
+*.db-shm
+*.key
+data/uploads/

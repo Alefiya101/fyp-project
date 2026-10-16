@@ -83,6 +83,8 @@ class SpeechService:
         num_speakers: int = 2,
         vad_threshold: float = 0.6,
         lexicon_path: str | None = None,
+        language: str | None = "hi",
+        beam_size: int = 5,
     ) -> None:
         self._model_size = model_size
         if compute_type != "float32":
@@ -95,6 +97,8 @@ class SpeechService:
         self._num_speakers = num_speakers
         self._vad_threshold = vad_threshold
         self._lexicon_path = lexicon_path
+        self._language = language
+        self._beam_size = beam_size
         self._asr_model = None  # lazy
         self._asr_processor = None
 
@@ -154,7 +158,7 @@ class SpeechService:
             except Exception as e:  # noqa: BLE001
                 logger.warning("Failed to read medical lexicon at '%s': %s", lex_path, e)
 
-        return "Doctor-patient OPD clinical consultation in Hindi and English: fever, cough, khansi, bukhar, dard, infection, tablets."
+        return "Doctor-patient OPD clinical consultation in Hindi and English. Symptoms: bukhar, fever, sar dard, pet dard, headache, cough, khansi, sardi, loose motion, vomiting, blood pressure, dawai, medicines."
 
     def _get_model(self):
         """Load the Hugging Face Transformers model and processor on first access."""
@@ -257,56 +261,74 @@ class SpeechService:
             # Feed the 16 kHz waveform directly to the Transformers processor.
             initial_prompt = self._get_initial_prompt()
             try:
-                import torch
-
-                processor = self._asr_processor
-                if processor is None:
-                    raise RuntimeError("Whisper processor was not initialized with the ASR model.")
-                inputs = processor(chunk, sampling_rate=16_000, return_tensors="pt")
-                input_features = inputs.input_features.to(model.device)
-                generation_kwargs = {
-                    "task": "transcribe",
-                    "language": "en",
-                    "num_beams": 1,
-                    "repetition_penalty": 1.15,
-                    "no_repeat_ngram_size": 3,
-                    "return_dict_in_generate": True,
-                    "output_scores": True,
-                }
-                if initial_prompt:
-                    prompt_ids = processor.get_prompt_ids(initial_prompt, return_tensors="pt")
-                    generation_kwargs["prompt_ids"] = prompt_ids.to(model.device)
-                else:
-                    prompt_ids = None
-
-                with torch.inference_mode():
-                    output = model.generate(input_features, **generation_kwargs)
-
-                # In HuggingFace Transformers, prompt_ids appear prior to <|startoftranscript|>.
-                # We extract tokens strictly after <|startoftranscript|> to decode ONLY actual speech.
-                seq = output.sequences[0]
-                start_token = processor.tokenizer.convert_tokens_to_ids("<|startoftranscript|>")
-                matches = (seq == start_token).nonzero(as_tuple=True)[0]
-                if len(matches) > 0:
-                    actual_tokens = seq[matches[0] + 1 :]
-                    text = processor.decode(
-                        actual_tokens,
-                        skip_special_tokens=True,
-                        clean_up_tokenization_spaces=False,
-                    ).strip()
-                else:
-                    text = processor.decode(
-                        seq,
-                        skip_special_tokens=True,
-                        clean_up_tokenization_spaces=False,
-                    ).strip()
-                if output.scores:
-                    token_scores = model.compute_transition_scores(
-                        output.sequences, output.scores, normalize_logits=True
+                if hasattr(model, "transcribe"):
+                    # faster-whisper backend
+                    asr_segs, _ = model.transcribe(
+                        chunk,
+                        beam_size=self._beam_size or 5,
+                        language=self._language or "hi",
+                        initial_prompt=initial_prompt,
+                        condition_on_previous_text=False,
+                        repetition_penalty=1.2,
                     )
-                    confidence = float(torch.exp(token_scores[0].mean()).item())
+                    text_parts = []
+                    confidences = []
+                    for a in asr_segs:
+                        text_parts.append(a.text.strip())
+                        if hasattr(a, "avg_logprob"):
+                            confidences.append(float(np.exp(a.avg_logprob)))
+                    text = " ".join(text_parts).strip()
+                    confidence = float(np.mean(confidences)) if confidences else 1.0
                 else:
-                    confidence = 1.0
+                    # HuggingFace Transformers backend
+                    import torch
+
+                    processor = self._asr_processor
+                    if processor is None:
+                        raise RuntimeError("Whisper processor was not initialized with the ASR model.")
+                    inputs = processor(chunk, sampling_rate=16_000, return_tensors="pt")
+                    input_features = inputs.input_features.to(model.device)
+                    generation_kwargs = {
+                        "task": "transcribe",
+                        "language": self._language or "en",
+                        "num_beams": self._beam_size or 1,
+                        "repetition_penalty": 1.15,
+                        "no_repeat_ngram_size": 3,
+                        "return_dict_in_generate": True,
+                        "output_scores": True,
+                    }
+                    if initial_prompt:
+                        prompt_ids = processor.get_prompt_ids(initial_prompt, return_tensors="pt")
+                        generation_kwargs["prompt_ids"] = prompt_ids.to(model.device)
+                    else:
+                        prompt_ids = None
+
+                    with torch.inference_mode():
+                        output = model.generate(input_features, **generation_kwargs)
+
+                    seq = output.sequences[0]
+                    start_token = processor.tokenizer.convert_tokens_to_ids("<|startoftranscript|>")
+                    matches = (seq == start_token).nonzero(as_tuple=True)[0]
+                    if len(matches) > 0:
+                        actual_tokens = seq[matches[0] + 1 :]
+                        text = processor.decode(
+                            actual_tokens,
+                            skip_special_tokens=True,
+                            clean_up_tokenization_spaces=False,
+                        ).strip()
+                    else:
+                        text = processor.decode(
+                            seq,
+                            skip_special_tokens=True,
+                            clean_up_tokenization_spaces=False,
+                        ).strip()
+                    if output.scores:
+                        token_scores = model.compute_transition_scores(
+                            output.sequences, output.scores, normalize_logits=True
+                        )
+                        confidence = float(torch.exp(token_scores[0].mean()).item())
+                    else:
+                        confidence = 1.0
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ASR failed for segment [%.2f, %.2f]: %s", start_s, end_s, exc)
                 text, confidence = "", 0.0
@@ -457,7 +479,15 @@ def _segment_to_dict(ts: TranscriptSegment) -> dict:
 
 
 def _build_transcript_json(session_id: str, segments: list[TranscriptSegment]) -> dict:
-    seg_dicts = [_segment_to_dict(s) for s in segments]
+    import re
+    valid_segments = []
+    for s in segments:
+        clean = re.sub(r"^[\s,\.\?\-_]+$", "", s.text).strip() if s.text else ""
+        if clean:
+            s.text = clean
+            valid_segments.append(s)
+
+    seg_dicts = [_segment_to_dict(s) for s in valid_segments]
 
     if seg_dicts:
         lang_counts: Counter = Counter(s["lang"] for s in seg_dicts)

@@ -43,5 +43,11 @@
   "dama": {"code": "195967001", "display": "Asthma (disorder)", "system": "http://snomed.info/sct"},
   "gastroenteritis": {"code": "25374005", "display": "Gastroenteritis (disorder)", "system": "http://snomed.info/sct"},
   "acidity": {"code": "42658000", "display": "Hyperacidity (finding)", "system": "http://snomed.info/sct"},
-  "gerd": {"code": "235595009", "display": "Gastroesophageal reflux disease (disorder)", "system": "http://snomed.info/sct"}
+  "gerd": {"code": "235595009", "display": "Gastroesophageal reflux disease (disorder)", "system": "http://snomed.info/sct"},
+  "abdominal pain": {"code": "21522000", "display": "Abdominal pain (finding)", "system": "http://snomed.info/sct"},
+  "pet me dard": {"code": "21522000", "display": "Abdominal pain (finding)", "system": "http://snomed.info/sct"},
+  "sneezing": {"code": "249497008", "display": "Sneezing (finding)", "system": "http://snomed.info/sct"},
+  "chheek": {"code": "249497008", "display": "Sneezing (finding)", "system": "http://snomed.info/sct"},
+  "runny nose": {"code": "64531003", "display": "Rhinorrhea (finding)", "system": "http://snomed.info/sct"},
+  "rhinorrhea": {"code": "64531003", "display": "Rhinorrhea (finding)", "system": "http://snomed.info/sct"}
 }

@@ -404,6 +404,6 @@ class FHIRMapper:
             "entry": bundle_entries,
         }
 
-        # Validate with fhir.resources
-        Bundle.model_validate(bundle_dict)
-        return bundle_dict
+        # Validate with fhir.resources and export JSON-serializable dictionary
+        bundle_obj = Bundle.model_validate(bundle_dict)
+        return bundle_obj.model_dump(mode="json", exclude_none=True)

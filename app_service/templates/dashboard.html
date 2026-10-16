@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Ambient Clinical Scribe — Doctor Dashboard</title>
+  <link rel="stylesheet" href="/static/review.css">
+  <style>
+    .dashboard-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+    .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
+    .metric-card { background: #ffffff; padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .metric-value { font-size: 1.6rem; font-weight: 700; color: #1e293b; margin-top: 0.35rem; }
+    .metric-label { font-size: 0.75rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+    .session-table { width: 100%; border-collapse: collapse; background: #ffffff; border-radius: 8px; border: 1px solid var(--border); overflow: hidden; }
+    .session-table th { background: #f8fafc; padding: 0.75rem 1rem; text-align: left; font-size: 0.75rem; color: #64748b; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+    .session-table td { padding: 0.85rem 1rem; border-bottom: 1px solid #f1f5f9; font-size: 0.88rem; }
+    
+    /* Recording Modal Styling */
+    .record-box { text-align: center; padding: 2.5rem; }
+    .pulse-dot {
+      width: 20px; height: 20px; background: #ef4444; border-radius: 50%; display: inline-block;
+      animation: pulse-ring 1.2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+      70% { transform: scale(1.1); box-shadow: 0 0 0 16px rgba(239, 68, 68, 0); }
+      100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    .timer { font-size: 2.5rem; font-family: monospace; font-weight: 700; color: #1e293b; margin: 1rem 0; }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a href="/" class="navbar-brand">
+      🩺 <span>Edge-AI Ambient Clinical Scribe (Indian OPD)</span>
+    </a>
+    <div class="navbar-actions">
+      {% if queue.online %}
+        <span class="badge badge-online">● ABDM Network Online</span>
+      {% else %}
+        <span class="badge badge-offline">○ Local Offline Mode</span>
+      {% endif %}
+      {% if mock_mode %}
+        <span class="badge badge-mock">ABDM Sandbox (Mock Mode)</span>
+      {% endif %}
+      <span style="font-size: 0.82rem; color: #475569;">Doctor: <strong>Dr. Sharma</strong></span>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="dashboard-header">
+      <div>
+        <h1 style="font-size: 1.5rem; font-weight: 700;">OPD Consultations Dashboard</h1>
+        <p style="color: #64748b; font-size: 0.9rem;">Record conversations via microphone, upload audio, and generate ABDM FHIR bundles.</p>
+      </div>
+      <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+        <button class="btn btn-danger" onclick="openRecordModal()">🎙️ Record Live Consultation</button>
+        <button class="btn btn-outline" onclick="triggerFileInput()">📁 Upload Audio File</button>
+        <button class="btn btn-outline" onclick="loadSampleConsultation()">+ Load Sample Demo</button>
+        <button class="btn btn-primary" onclick="startNewSession()">+ Empty Session</button>
+      </div>
+    </div>
+
+    <!-- Hidden file input for audio upload -->
+    <input type="file" id="audio-file-input" accept="audio/*" style="display: none;" onchange="handleAudioUpload(this)">
+
+    <!-- Metric Cards -->
+    <div class="metric-grid">
+      <div class="metric-card">
+        <div class="metric-label">Total Consultations</div>
+        <div class="metric-value">{{ sessions|length }}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Sync Queue: Pending</div>
+        <div class="metric-value" style="color: #d97706;">{{ queue.pending }}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">ABDM Records Synced</div>
+        <div class="metric-value" style="color: #16a34a;">{{ queue.completed }}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Sync Retries / Failed</div>
+        <div class="metric-value" style="color: #dc2626;">{{ queue.failed }}</div>
+      </div>
+    </div>
+
+    <!-- Sessions Table -->
+    <div style="background: #ffffff; border-radius: 8px; border: 1px solid var(--border); padding: 1.25rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2 style="font-size: 1.1rem; font-weight: 700;">Recent OPD Consultations</h2>
+        <button class="btn btn-outline" onclick="triggerSyncWorker()" style="font-size: 0.8rem; padding: 0.35rem 0.75rem;">⚡ Trigger ABDM Outbox Sync</button>
+      </div>
+      <table class="session-table">
+        <thead>
+          <tr>
+            <th>Session ID</th>
+            <th>Clinician</th>
+            <th>Patient ID</th>
+            <th>Status</th>
+            <th>Last Updated</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if sessions %}
+            {% for s in sessions %}
+              <tr>
+                <td><strong>{{ s.session_id }}</strong></td>
+                <td>{{ s.clinician_id }}</td>
+                <td>{{ s.patient_identifier or "Walk-in Patient" }}</td>
+                <td>
+                  {% if s.status == 'DRAFT_READY' %}
+                    <span class="badge" style="background: #dbeafe; color: #1e40af;">Draft Ready</span>
+                  {% elif s.status == 'APPROVED' %}
+                    <span class="badge" style="background: #fef3c7; color: #92400e;">Approved (Pending Sync)</span>
+                  {% elif s.status == 'SYNCED' %}
+                    <span class="badge badge-online">Synced to ABDM</span>
+                  {% elif s.status == 'REJECTED' %}
+                    <span class="badge badge-offline">Rejected</span>
+                  {% else %}
+                    <span class="badge" style="background: #f1f5f9; color: #475569;">{{ s.status }}</span>
+                  {% endif %}
+                </td>
+                <td style="color: #64748b; font-size: 0.8rem;">{{ s.updated_at[:19] }}</td>
+                <td>
+                  <a href="/review/{{ s.session_id }}" class="btn btn-primary" style="padding: 0.3rem 0.75rem; font-size: 0.8rem;">Review Draft</a>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="6" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                No consultations found. Click "🎙️ Record Live Consultation" or "Upload Audio File" to get started!
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Live Recording Modal -->
+  <div id="record-modal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 style="font-size: 1.05rem; font-weight: 700;">Live Consultation Audio Recorder</h3>
+        <button class="btn btn-outline" onclick="closeRecordModal()" style="padding: 0.2rem 0.5rem;">✕</button>
+      </div>
+      <div class="record-box">
+        <div id="record-standby">
+          <p style="color: #64748b; margin-bottom: 1.5rem; font-size: 0.92rem;">
+            Click <strong>Start Recording</strong> to capture doctor-patient consultation audio from your microphone.
+          </p>
+          <button class="btn btn-danger" onclick="startMicRecording()" style="padding: 0.8rem 1.6rem; font-size: 1rem;">
+            ● Start Recording
+          </button>
+        </div>
+        <div id="record-active" style="display: none;">
+          <div class="pulse-dot"></div>
+          <div class="timer" id="record-timer">00:00</div>
+          <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 1.5rem;">
+            Listening to consultation in Hindi/English... Speak normally.
+          </p>
+          <button class="btn btn-primary" onclick="stopMicRecording()" style="padding: 0.8rem 1.6rem; font-size: 1rem;">
+            ⏹️ Stop & Process Consultation
+          </button>
+        </div>
+        <div id="record-processing" style="display: none;">
+          <h4 style="color: #1e40af; margin-bottom: 0.5rem;">Processing Consultation...</h4>
+          <p style="color: #64748b; font-size: 0.88rem;">
+            Running speech preprocessing, VAD, ASR transcription, and ABDM FHIR extraction. Please wait...
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let audioStream = null;
+    let audioContext = null;
+    let audioProcessor = null;
+    let audioSamples = [];
+    let timerInterval = null;
+    let recordStartTime = 0;
+
+    function openRecordModal() {
+      document.getElementById("record-standby").style.display = "block";
+      document.getElementById("record-active").style.display = "none";
+      document.getElementById("record-processing").style.display = "none";
+      document.getElementById("record-modal").classList.add("open");
+    }
+
+    function closeRecordModal() {
+      if (audioStream) {
+        audioStream.getTracks().forEach(t => t.stop());
+      }
+      clearInterval(timerInterval);
+      document.getElementById("record-modal").classList.remove("open");
+    }
+
+    async function startMicRecording() {
+      try {
+        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+        const source = audioContext.createMediaStreamSource(audioStream);
+        
+        // Capture mono 16kHz float32 audio
+        audioSamples = [];
+        audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+        audioProcessor.onaudioprocess = (e) => {
+          const inputData = e.inputBuffer.getChannelData(0);
+          audioSamples.push(new Float32Array(inputData));
+        };
+        source.connect(audioProcessor);
+        audioProcessor.connect(audioContext.destination);
+
+        document.getElementById("record-standby").style.display = "none";
+        document.getElementById("record-active").style.display = "block";
+
+        recordStartTime = Date.now();
+        timerInterval = setInterval(() => {
+          const elapsedSec = Math.floor((Date.now() - recordStartTime) / 1000);
+          const m = String(Math.floor(elapsedSec / 60)).padStart(2, "0");
+          const s = String(elapsedSec % 60).padStart(2, "0");
+          document.getElementById("record-timer").innerText = `${m}:${s}`;
+        }, 500);
+      } catch (err) {
+        alert("Microphone permission denied or audio device not available: " + err.message);
+      }
+    }
+
+    async function stopMicRecording() {
+      clearInterval(timerInterval);
+      document.getElementById("record-active").style.display = "none";
+      document.getElementById("record-processing").style.display = "block";
+
+      if (audioProcessor) audioProcessor.disconnect();
+      if (audioStream) audioStream.getTracks().forEach(t => t.stop());
+
+      // Flatten PCM samples
+      let totalLength = 0;
+      for (const chunk of audioSamples) totalLength += chunk.length;
+      const merged = new Float32Array(totalLength);
+      let offset = 0;
+      for (const chunk of audioSamples) {
+        merged.set(chunk, offset);
+        offset += chunk.length;
+      }
+
+      // Encode standard 16kHz Mono 16-bit PCM WAV
+      const wavBlob = encodePCMToWAV(merged, 16000);
+
+      // Create consultation session and upload
+      const sid = "OPD_MIC_" + Math.random().toString(36).substring(2, 7).toUpperCase();
+      await uploadAudioBlob(sid, wavBlob, `${sid}_mic_recording.wav`);
+    }
+
+    function encodePCMToWAV(samples, sampleRate) {
+      const buffer = new ArrayBuffer(44 + samples.length * 2);
+      const view = new DataView(buffer);
+      function writeStr(offset, str) {
+        for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+      }
+      writeStr(0, "RIFF");
+      view.setUint32(4, 36 + samples.length * 2, true);
+      writeStr(8, "WAVE");
+      writeStr(12, "fmt ");
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true); // PCM
+      view.setUint16(22, 1, true); // Mono
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      writeStr(36, "data");
+      view.setUint32(40, samples.length * 2, true);
+
+      let p = 44;
+      for (let i = 0; i < samples.length; i++, p += 2) {
+        const s = Math.max(-1, Math.min(1, samples[i]));
+        view.setInt16(p, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      }
+      return new Blob([view], { type: "audio/wav" });
+    }
+
+    async function uploadAudioBlob(sessionId, blob, filename) {
+      // 1. Start Session
+      await fetch("/api/sessions/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, clinician_id: "dr.sharma@opd" })
+      });
+
+      // 2. Upload Audio Form
+      const formData = new FormData();
+      formData.append("file", blob, filename);
+      formData.append("actor_id", "dr.sharma");
+
+      const res = await fetch(`/api/sessions/${sessionId}/upload-audio`, {
+        method: "POST",
+        body: formData
+      });
+      const data = await res.json();
+      if (res.ok) {
+        window.location.href = `/review/${sessionId}`;
+      } else {
+        alert("Audio processing error: " + (data.detail || "Server error"));
+        closeRecordModal();
+      }
+    }
+
+    function triggerFileInput() {
+      document.getElementById("audio-file-input").click();
+    }
+
+    async function handleAudioUpload(input) {
+      if (!input.files || input.files.length === 0) return;
+      const file = input.files[0];
+      const sid = "OPD_FILE_" + Math.random().toString(36).substring(2, 7).toUpperCase();
+      
+      const proceed = confirm(`Upload and process audio '${file.name}' for consultation session ${sid}?`);
+      if (!proceed) return;
+
+      // Show processing notification
+      openRecordModal();
+      document.getElementById("record-standby").style.display = "none";
+      document.getElementById("record-active").style.display = "none";
+      document.getElementById("record-processing").style.display = "block";
+
+      await uploadAudioBlob(sid, file, file.name);
+    }
+
+    async function startNewSession() {
+      const sid = prompt("Enter OPD Session Identifier (or leave blank to auto-generate):", "OPD_" + Math.random().toString(36).substring(2, 7).toUpperCase());
+      if (sid === null) return;
+
+      const res = await fetch("/api/sessions/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sid || undefined, clinician_id: "dr.sharma@opd" })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        window.location.href = `/review/${data.session_id}`;
+      } else {
+        alert(data.detail || "Failed to start session");
+      }
+    }
+
+    async function loadSampleConsultation() {
+      const sid = "S001_SAMPLE_" + Math.random().toString(36).substring(2, 6).toUpperCase();
+      const sampleTranscript = {
+        "session_id": sid,
+        "language_mix": "hi-en",
+        "segments": [
+          {"start": 0.0, "end": 3.0, "speaker": "doctor", "text": "Aapko kab se bukhar hai?", "lang": "hi-en", "confidence": 0.95},
+          {"start": 3.1, "end": 8.0, "speaker": "patient", "text": "Teen din se tez bukhar hai aur badan me dard hai. Khansi bilkul nahi hai.", "lang": "hi-en", "confidence": 0.92},
+          {"start": 8.1, "end": 12.0, "speaker": "doctor", "text": "Temperature 101.4 F hai. Pulse 88 hai.", "lang": "hi-en", "confidence": 0.96},
+          {"start": 12.1, "end": 15.0, "speaker": "doctor", "text": "Yeh viral fever lag raha hai.", "lang": "hi-en", "confidence": 0.94},
+          {"start": 15.1, "end": 20.0, "speaker": "doctor", "text": "Aap Paracetamol 650 mg TDS lijiye 3 din tak khana khane ke baad.", "lang": "hi-en", "confidence": 0.97},
+          {"start": 20.1, "end": 24.0, "speaker": "doctor", "text": "Agar aaram na mile to Complete Blood Count (CBC) test karwa lena.", "lang": "hi-en", "confidence": 0.91}
+        ]
+      };
+
+      const res = await fetch(`/api/sessions/${sid}/transcript?actor_id=dr.sharma`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sampleTranscript)
+      });
+      if (res.ok) {
+        window.location.href = `/review/${sid}`;
+      } else {
+        alert("Failed to load sample consultation");
+      }
+    }
+
+    async function triggerSyncWorker() {
+      const res = await fetch("/api/sync/trigger", { method: "POST" });
+      const data = await res.json();
+      alert(`Sync triggered: ${data.records_synced} records synced to ABDM.`);
+      window.location.reload();
+    }
+  </script>
+</body>
+</html>
