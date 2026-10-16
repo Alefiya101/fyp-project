@@ -7,20 +7,24 @@ Allows clinicians to edit patient/practitioner info and add/remove symptoms, dia
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import re
 import threading
 from datetime import datetime
+from math import gcd
 from pathlib import Path
 from typing import Annotated, Any
 
 import numpy as np
+import soundfile as sf
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from scipy.signal import resample_poly
 
 from clinical_service.fhir_mapper.mapper import FHIRMapper
 from clinical_service.schemas.interface2_extraction import (
@@ -45,6 +49,19 @@ RECORDINGS_DIR = ROOT_DIR / "recordings"
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
+
+_service_instance: ClinicalService | None = None
+_service_lock = threading.Lock()
+
+
+def get_clinical_service() -> ClinicalService:
+    """Thread-safe singleton ClinicalService to avoid reloading weights repeatedly."""
+    global _service_instance
+    with _service_lock:
+        if _service_instance is None:
+            _service_instance = ClinicalService(enable_llm_refiner=True)
+        return _service_instance
+
 
 app = FastAPI(
     title="ABDM OPD Ambient Clinical Scribing Studio",
@@ -279,13 +296,34 @@ def get_latest_consultation():
 
 @app.post("/api/process-audio")
 async def process_audio_file(file: Annotated[UploadFile, File()]):
-    """Receives audio file (.wav, .mp3), runs Whisper ASR + LLM Refiner + FHIR Mapper."""
+    """Receives audio file (.wav, .mp3, etc.), runs Whisper ASR + LLM Refiner + FHIR Mapper."""
     try:
-        temp_wav = RECORDINGS_DIR / "live_consultation.wav"
         content = await file.read()
-        temp_wav.write_bytes(content)
+        if not content:
+            raise HTTPException(status_code=400, detail="Uploaded audio file is empty.")
 
-        service = ClinicalService(enable_llm_refiner=True)
+        # Decode using soundfile (supports wav, mp3, flac, ogg, etc.)
+        try:
+            audio_data, sr = sf.read(io.BytesIO(content), dtype="float32", always_2d=False)
+        except Exception:  # noqa: BLE001
+            ext = Path(file.filename or "audio.wav").suffix.lower() or ".wav"
+            temp_raw = RECORDINGS_DIR / f"upload_raw{ext}"
+            temp_raw.write_bytes(content)
+            audio_data, sr = sf.read(str(temp_raw), dtype="float32", always_2d=False)
+
+        # Convert to mono if multi-channel
+        if audio_data.ndim > 1:
+            audio_data = audio_data.mean(axis=1)
+
+        # Resample to 16kHz mono PCM_16 WAV
+        if sr != 16000:
+            g = gcd(sr, 16000)
+            audio_data = resample_poly(audio_data, 16000 // g, sr // g).astype(np.float32)
+
+        temp_wav = RECORDINGS_DIR / "live_consultation.wav"
+        sf.write(str(temp_wav), audio_data, 16000, subtype="PCM_16")
+
+        service = get_clinical_service()
         validated_bundle = service.process_audio(temp_wav, session_id="live_consultation")
 
         # Persist to live_fhir_bundle.json
@@ -293,6 +331,8 @@ async def process_audio_file(file: Annotated[UploadFile, File()]):
         out_path.write_text(validated_bundle.model_dump_json(indent=2), encoding="utf-8")
 
         return format_validated_bundle_response(validated_bundle)
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception("Audio processing failed")
         raise HTTPException(status_code=500, detail=f"Audio processing error: {exc}")
@@ -383,7 +423,7 @@ def stop_live_recording():
         temp_wav = RECORDINGS_DIR / "live_consultation.wav"
         sf.write(str(temp_wav), audio_data.flatten(), 16000)
 
-        service = ClinicalService(enable_llm_refiner=True)
+        service = get_clinical_service()
         validated_bundle = service.process_audio(temp_wav, session_id="live_consultation")
 
         out_path = OUTPUT_DIR / "live_fhir_bundle.json"

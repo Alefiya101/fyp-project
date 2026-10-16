@@ -432,39 +432,29 @@ function populateStateFromData(data) {
   if (summary.patient && summary.patient.name) state.patientName = summary.patient.name;
   if (summary.practitioner && summary.practitioner.name) state.practitionerName = summary.practitioner.name;
 
-  if (summary.symptoms && summary.symptoms.length > 0) {
-    state.symptoms = summary.symptoms.map((s) => ({
-      name: s.name,
-      duration: s.duration || "3",
-      status: s.clinical_status || "active",
-    }));
-  }
+  state.symptoms = (summary.symptoms || []).map((s) => ({
+    name: s.name,
+    duration: s.duration || "3",
+    status: s.clinical_status || "active",
+  }));
 
-  if (summary.diagnoses && summary.diagnoses.length > 0) {
-    state.diagnoses = summary.diagnoses.map((d) => ({
-      name: d.name,
-      confidence: d.confidence || "high conf",
-      status: "provisional",
-    }));
-  }
+  state.diagnoses = (summary.diagnoses || []).map((d) => ({
+    name: d.name,
+    confidence: d.confidence || "high conf",
+    status: "provisional",
+  }));
 
-  if (summary.medications && summary.medications.length > 0) {
-    state.medications = summary.medications.map((m) => ({
-      name: m.name,
-      dosage: m.dosage || "500 mg",
-      frequency: m.frequency || "TDS",
-      duration: m.duration || "3 days",
-      status: m.status || "new",
-    }));
-  }
+  state.medications = (summary.medications || []).map((m) => ({
+    name: m.name,
+    dosage: m.dosage || "500 mg",
+    frequency: m.frequency || "TDS",
+    duration: m.duration || "3 days",
+    status: m.status || "new",
+  }));
 
-  if (summary.vitals && summary.vitals.length > 0) {
-    state.vitals = summary.vitals.map((v) => ({ name: v.name, value: v.value }));
-  }
+  state.vitals = (summary.vitals || []).map((v) => ({ name: v.name, value: v.value }));
 
-  if (summary.investigations && summary.investigations.length > 0) {
-    state.investigations = summary.investigations;
-  }
+  state.investigations = summary.investigations || [];
 }
 
 /* ==========================================================================
@@ -565,6 +555,14 @@ async function handleAudioUpload(event) {
 }
 
 async function sendAudioForProcessing(blobOrFile, filename) {
+  const uploadBtn = document.getElementById("btn-upload-audio");
+  const origHtml = uploadBtn ? uploadBtn.innerHTML : "";
+  if (uploadBtn) {
+    uploadBtn.disabled = true;
+    uploadBtn.innerHTML = '<i class="ph-bold ph-spinner ph-spin"></i> Processing...';
+  }
+  showToast(`Processing ${filename} with Whisper ASR & Clinical NLP...`);
+
   try {
     const formData = new FormData();
     formData.append("file", blobOrFile, filename);
@@ -585,6 +583,11 @@ async function sendAudioForProcessing(blobOrFile, filename) {
     showToast("Audio successfully converted to ABDM FHIR R4!");
   } catch (err) {
     showToast(`Processing error: ${err.message}`, true);
+  } finally {
+    if (uploadBtn) {
+      uploadBtn.disabled = false;
+      uploadBtn.innerHTML = origHtml;
+    }
   }
 }
 
