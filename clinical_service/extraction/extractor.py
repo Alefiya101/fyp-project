@@ -73,12 +73,14 @@ class RuleBasedSLMExtractor(BaseExtractor):
 
         # Common symptom dictionary keys
         self.symptom_keywords = [
-            ("fever", ["fever", "bukhar", "pyrexia", "tap"]),
+            ("fever", ["fever", "bukhar", "pyrexia", "tap", "bijkhar"]),
             ("cough", ["cough", "khansi"]),
             ("productive cough", ["productive cough", "balgam wali khansi", "wet cough", "phlegm"]),
             ("cold", ["cold", "sardi", "jukham"]),
-            ("runny nose", ["runny nose", "naak behna", "rhinorrhea", "watery nasal"]),
-            ("headache", ["headache", "sar dard", "sar me dard", "sir dard"]),
+            ("runny nose", ["runny nose", "naak behna", "naak beh rahi", "naak beh", "nakhmehri", "nakberi", "rhinorrhea", "watery nasal", "running nose"]),
+            ("headache", ["headache", "sar dard", "sar me dard", "sir dard", "sir me dard", "sermidhar", "sermidar", "head ache"]),
+            ("abdominal pain", ["abdominal pain", "pet dard", "pet me dard", "stomach pain", "stomach ache", "pet kharab", "veitmehdar"]),
+            ("sneezing", ["sneezing", "chheek", "chheenk", "chheekein", "chheekar", "chheekh", "tkr", "chhi kary"]),
             ("vomiting", ["vomiting", "ulti"]),
             ("nausea", ["nausea", "ji ghabrana", "mitli"]),
             ("loose motion", ["loose motion", "diarrhea", "diarrhoea", "dast"]),

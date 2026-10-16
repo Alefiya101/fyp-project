@@ -37,7 +37,7 @@ class AudioLoadError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 def load_audio(path: str) -> tuple[np.ndarray, int]:
-    """Load a WAV (or any soundfile-readable) file as mono float32.
+    """Load any audio file (WAV, M4A, MP3, AAC, FLAC, etc.) as mono float32.
 
     Parameters
     ----------
@@ -59,16 +59,51 @@ def load_audio(path: str) -> tuple[np.ndarray, int]:
     p = Path(path)
     if not p.exists():
         raise AudioLoadError(f"Audio file not found: {path}")
+
+    # First attempt: soundfile (fast for WAV/FLAC/OGG)
     try:
         data, sr = sf.read(str(p), dtype="float32", always_2d=False)
-    except Exception as exc:
-        raise AudioLoadError(f"Failed to decode audio '{path}': {exc}") from exc
+        if data.ndim > 1:
+            data = data.mean(axis=1)
+        return np.ascontiguousarray(data, dtype=np.float32), int(sr)
+    except Exception as sf_exc:
+        logger.debug("soundfile could not open '%s' (%s); falling back to PyAV.", path, sf_exc)
 
-    # Convert to mono if multi-channel
-    if data.ndim > 1:
-        data = data.mean(axis=1)
+    # Second attempt: PyAV (supports .m4a, .aac, .mp4, .wma, etc.)
+    try:
+        import av
+        container = av.open(str(p))
+        if not container.streams.audio:
+            container.close()
+            raise AudioLoadError(f"No audio stream found in '{path}'")
 
-    return np.ascontiguousarray(data, dtype=np.float32), int(sr)
+        stream = container.streams.audio[0]
+        sr = stream.codec_context.sample_rate or 16000
+        frames = []
+        for frame in container.decode(stream):
+            frames.append(frame.to_ndarray())
+        container.close()
+
+        if not frames:
+            raise AudioLoadError(f"Audio file '{path}' is empty or could not be decoded.")
+
+        # PyAV returns shape (channels, samples) per frame
+        audio = np.concatenate(frames, axis=1)
+        if audio.ndim > 1:
+            audio = audio.mean(axis=0)
+
+        # Normalize to float32 [-1.0, 1.0] if integer type
+        if np.issubdtype(audio.dtype, np.integer):
+            max_val = float(np.iinfo(audio.dtype).max)
+            audio = audio.astype(np.float32) / max_val
+        else:
+            audio = audio.astype(np.float32)
+
+        return np.ascontiguousarray(audio, dtype=np.float32), int(sr)
+    except Exception as av_exc:
+        raise AudioLoadError(
+            f"Failed to decode audio '{path}' with soundfile and PyAV: {av_exc}"
+        ) from av_exc
 
 
 def resample_to_16k(wav: np.ndarray, sr: int) -> np.ndarray:

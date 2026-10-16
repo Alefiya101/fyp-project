@@ -82,6 +82,8 @@ class SpeechService:
         num_speakers: int = 2,
         vad_threshold: float = 0.6,
         lexicon_path: str | None = None,
+        language: str | None = "hi",
+        beam_size: int = 5,
     ) -> None:
         self._model_size = model_size
         self._compute_type = compute_type
@@ -89,6 +91,8 @@ class SpeechService:
         self._num_speakers = num_speakers
         self._vad_threshold = vad_threshold
         self._lexicon_path = lexicon_path
+        self._language = language
+        self._beam_size = beam_size
         self._asr_model = None  # lazy
 
     # ------------------------------------------------------------------
@@ -147,7 +151,7 @@ class SpeechService:
             except Exception as e:  # noqa: BLE001
                 logger.warning("Failed to read medical lexicon at '%s': %s", lex_path, e)
 
-        return "Doctor-patient OPD clinical consultation in Hindi and English. Symptoms, vitals, prescriptions."
+        return "Doctor-patient OPD clinical consultation in Hindi and English. Symptoms: bukhar, fever, sar dard, pet dard, headache, cough, khansi, sardi, loose motion, vomiting, blood pressure, dawai, medicines."
 
     def _get_model(self):
         """Load the ASR model on first access."""
@@ -249,8 +253,8 @@ class SpeechService:
             try:
                 asr_segs, _ = model.transcribe(
                     chunk,
-                    beam_size=1,
-                    language=None,
+                    beam_size=self._beam_size,
+                    language=self._language,
                     initial_prompt=initial_prompt,
                     condition_on_previous_text=False,
                     repetition_penalty=1.2,
@@ -397,7 +401,15 @@ def _segment_to_dict(ts: TranscriptSegment) -> dict:
 
 
 def _build_transcript_json(session_id: str, segments: list[TranscriptSegment]) -> dict:
-    seg_dicts = [_segment_to_dict(s) for s in segments]
+    import re
+    valid_segments = []
+    for s in segments:
+        clean = re.sub(r"^[\s,\.\?\-_]+$", "", s.text).strip() if s.text else ""
+        if clean:
+            s.text = clean
+            valid_segments.append(s)
+
+    seg_dicts = [_segment_to_dict(s) for s in valid_segments]
 
     if seg_dicts:
         lang_counts: Counter = Counter(s["lang"] for s in seg_dicts)

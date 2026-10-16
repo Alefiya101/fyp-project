@@ -51,3 +51,10 @@ speech_service/**/__pycache__/
 speech_service/**/*.py[cod]
 speech_service/asr/*_wer*.csv
 speech_service/asr/*_benchmark.json
+
+# Local App Service Data, DB, and Secret Keys
+*.db
+*.db-wal
+*.db-shm
+*.key
+data/uploads/
