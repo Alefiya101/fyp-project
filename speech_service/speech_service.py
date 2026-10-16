@@ -271,12 +271,26 @@ class SpeechService:
                 if initial_prompt:
                     prompt_ids = processor.get_prompt_ids(initial_prompt, return_tensors="pt")
                     generation_kwargs["prompt_ids"] = prompt_ids.to(model.device)
+                else:
+                    prompt_ids = None
 
                 with torch.inference_mode():
                     output = model.generate(input_features, **generation_kwargs)
-                text = processor.batch_decode(
-                    output.sequences, skip_special_tokens=True
-                )[0].strip()
+
+                # In HuggingFace Transformers, prompt_ids are prepended to the output tokens.
+                # We slice them off so only the actual spoken words are decoded!
+                seqs = output.sequences
+                if prompt_ids is not None:
+                    prompt_len = prompt_ids.shape[-1]
+                    seqs = seqs[:, prompt_len:]
+
+                text = processor.batch_decode(seqs, skip_special_tokens=True)[0].strip()
+
+                # Safety fallback: clean up any remaining prompt echoes
+                if text.lower().startswith("doctor-patient opd consultation"):
+                    kw_idx = text.lower().find("spo2")
+                    if kw_idx != -1:
+                        text = text[kw_idx + 4 :].strip(" ,.:;")
                 if output.scores:
                     token_scores = model.compute_transition_scores(
                         output.sequences, output.scores, normalize_logits=True
