@@ -44,8 +44,8 @@ NEW_MED_CUES = [
 # Frequency normalization map
 FREQ_PATTERNS = [
     (re.compile(r"\b(?:thrice\s+a\s+day|three\s+times\s+(?:a\s+)?day|3\s+times|din\s+me\s+3\s+baar|subah\s+dopahar\s+(?:aur\s+)?sha?am|tds)\b", re.IGNORECASE), "TDS"),
-    (re.compile(r"\b(?:twice\s+a\s+day|two\s+times\s+(?:a\s+)?day|2\s+times|din\s+me\s+2\s+baar|subah\s+sha?am|subah\s+aur\s+raat|bd)\b", re.IGNORECASE), "BD"),
-    (re.compile(r"\b(?:once\s+a\s+day|one\s+time\s+(?:a\s+)?day|1\s+time|din\s+me\s+1\s+baar|rozana\s+ek|daily\s+once|od)\b", re.IGNORECASE), "OD"),
+    (re.compile(r"\b(?:twice\s+daily|twice\s+a\s+day|two\s+times\s+(?:a\s+)?day|2\s+times|din\s+me\s+2\s+baar|subah\s+sha?am|subah\s+aur\s+raat|bd)\b", re.IGNORECASE), "BD"),
+    (re.compile(r"\b(?:once\s+daily|once\s+a\s+day|one\s+time\s+(?:a\s+)?day|1\s+time|din\s+me\s+1\s+baar|rozana\s+ek|daily\s+once|od)\b", re.IGNORECASE), "OD"),
     (re.compile(r"\b(?:four\s+times\s+(?:a\s+)?day|4\s+times|din\s+me\s+4\s+baar|qid)\b", re.IGNORECASE), "QID"),
     (re.compile(r"\b(?:as\s+needed|when\s+needed|sos|jab\s+zaroorat\s+ho|dard\s+hone\s+par|bukhar\s+aane\s+par)\b", re.IGNORECASE), "SOS"),
 ]
@@ -70,8 +70,9 @@ WORD_NUMBERS = {
 # Instruction patterns
 INSTRUCTION_PATTERNS = [
     (re.compile(r"\b(?:after\s+food|after\s+meals|khana\s+khane\s+ke\s+baad|khane\s+ke\s+baad)\b", re.IGNORECASE), "after food"),
-    (re.compile(r"\b(?:before\s+food|empty\s+stomach|khana\s+khane\s+se\s+pehle|khali\s+pet|subah\s+khali\s+pet)\b", re.IGNORECASE), "empty stomach / before food"),
+    (re.compile(r"\b(?:before\s+food|empty\s+stomach|khana\s+khane\s+se\s+pehle|khali\s+pet|subah\s+khali\s+pet|before\s+breakfast)\b", re.IGNORECASE), "before breakfast / empty stomach"),
     (re.compile(r"\b(?:at\s+bedtime|before\s+sleeping|raat\s+ko\s+sote\s+samay|sone\s+se\s+pehle)\b", re.IGNORECASE), "at bedtime"),
+    (re.compile(r"\b(?:small\s+sips|sips|chhoti\s+ghoont)\b", re.IGNORECASE), "in small sips"),
 ]
 
 

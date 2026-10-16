@@ -163,7 +163,7 @@ class FHIRValidator:
                             if c.get("system"):
                                 coding_systems_found.add(c["system"])
 
-        report["coding_systems"] = sorted(list(coding_systems_found))
+        report["coding_systems"] = sorted(coding_systems_found)
         if report["errors"]:
             report["conforms"] = False
 

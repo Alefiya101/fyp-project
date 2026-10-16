@@ -64,6 +64,16 @@ class MedicalTranscriptNormalizer:
         self.canonical_terms.extend(self.lookup.rxnorm.keys())
         self.canonical_terms.extend(self.lookup.loinc.keys())
 
+        # Standard clinical tokens that must be preserved
+        core_tokens = [
+            "infection", "infections", "bacterial", "viral", "throat", "pharyngitis",
+            "dehydration", "acidity", "gastritis", "dyspepsia", "solution", "syrup",
+            "tablet", "capsule", "metformin", "paracetamol", "omeprazole", "amoxicillin", "ors"
+        ]
+        for t in core_tokens:
+            if t not in self.canonical_terms:
+                self.canonical_terms.append(t)
+
         # 2. Load custom terms from medical_lexicon.txt if available
         if lexicon_path and Path(lexicon_path).is_file():
             try:
@@ -108,15 +118,26 @@ class MedicalTranscriptNormalizer:
             word = words[i].lower().strip(".,;:?!")
             match_found = False
 
-            # Check 2-word phrase first (e.g. 'sar dard', 'blood pressure')
-            if i + 1 < len(words):
+            # Check 2-word phrase first (e.g. 'sar dard', 'blood pressure') - only if neither is numeric
+            if i + 1 < len(words) and not re.match(r"^\d", words[i]) and not re.match(r"^\d", words[i + 1]):
                 two_word = f"{word} {words[i + 1].lower().strip('.,;:?!')}"
-                matches = difflib.get_close_matches(two_word, self.canonical_terms, n=1, cutoff=0.85)
+                if two_word in self.canonical_terms:
+                    corrected_words.append(words[i])
+                    corrected_words.append(words[i + 1])
+                    i += 2
+                    continue
+                matches = difflib.get_close_matches(two_word, self.canonical_terms, n=1, cutoff=0.88)
                 if matches:
                     corrected_words.append(matches[0])
                     i += 2
                     match_found = True
                     continue
+
+            # Check exact 1-word match: do not mutate if already valid canonical term
+            if word in self.canonical_terms:
+                corrected_words.append(words[i])
+                i += 1
+                continue
 
             # Check 1-word match for words with length >= 4
             if not match_found and len(word) >= 4:

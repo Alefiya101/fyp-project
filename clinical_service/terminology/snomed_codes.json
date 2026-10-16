@@ -49,5 +49,12 @@
   "sneezing": {"code": "249497008", "display": "Sneezing (finding)", "system": "http://snomed.info/sct"},
   "chheek": {"code": "249497008", "display": "Sneezing (finding)", "system": "http://snomed.info/sct"},
   "runny nose": {"code": "64531003", "display": "Rhinorrhea (finding)", "system": "http://snomed.info/sct"},
-  "rhinorrhea": {"code": "64531003", "display": "Rhinorrhea (finding)", "system": "http://snomed.info/sct"}
+  "rhinorrhea": {"code": "64531003", "display": "Rhinorrhea (finding)", "system": "http://snomed.info/sct"},
+  "bacterial throat infection": {"code": "363746003", "display": "Bacterial pharyngitis (disorder)", "system": "http://snomed.info/sct"},
+  "throat infection": {"code": "54150009", "display": "Throat infection (disorder)", "system": "http://snomed.info/sct"},
+  "dehydration": {"code": "34095006", "display": "Dehydration (disorder)", "system": "http://snomed.info/sct"},
+  "dyspepsia": {"code": "16761006", "display": "Dyspepsia (disorder)", "system": "http://snomed.info/sct"},
+  "gastritis": {"code": "399064001", "display": "Gastritis (disorder)", "system": "http://snomed.info/sct"},
+  "excessive thirst": {"code": "17244005", "display": "Excessive thirst (finding)", "system": "http://snomed.info/sct"},
+  "thirst": {"code": "17244005", "display": "Excessive thirst (finding)", "system": "http://snomed.info/sct"}
 }

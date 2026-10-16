@@ -157,31 +157,6 @@ function setupEventListeners() {
   btnRecordToggle.addEventListener("click", toggleRecording);
   btnUploadAudio.addEventListener("click", () => audioFileInput.click());
   audioFileInput.addEventListener("change", handleAudioUpload);
-
-  // Option 3: Quick Demo Case Select
-  const selectDemoCase = document.getElementById("select-demo-case");
-  if (selectDemoCase) {
-    selectDemoCase.addEventListener("change", async (e) => {
-      const caseId = e.target.value;
-      if (!caseId) return;
-      showToast(`Loading ${caseId}...`);
-      try {
-        const resp = await fetch(`/api/demo-cases/${caseId}`, { method: "POST" });
-        if (!resp.ok) {
-          const err = await resp.json();
-          throw new Error(err.detail || "Failed to load demo case");
-        }
-        const data = await resp.json();
-        populateStateFromData(data);
-        renderAllViews();
-        showToast("Demo consultation loaded & ABDM FHIR bundle generated!");
-      } catch (err) {
-        showToast(`Demo error: ${err.message}`, true);
-      } finally {
-        selectDemoCase.value = "";
-      }
-    });
-  }
 }
 
 /* ==========================================================================

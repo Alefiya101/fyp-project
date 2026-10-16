@@ -94,17 +94,21 @@ class RuleBasedSLMExtractor(BaseExtractor):
             ("burning urination", ["burning urination", "peshab me jalan", "dysuria"]),
             ("acidity", ["acidity", "jalan", "pet me jalan", "gas"]),
             ("joint pain", ["joint pain", "jodon me dard", "arthralgia"]),
+            ("excessive thirst", ["thirsty", "thirst", "pyaas", "jyada pyaas", "polydipsia"]),
         ]
 
         # Common diagnosis keywords
         self.diagnosis_keywords = [
             ("viral fever", ["viral fever", "viral infection", "viral"]),
             ("acute bronchitis", ["bronchitis"]),
-            ("upper respiratory tract infection", ["urti", "upper respiratory infection", "throat infection"]),
+            ("bacterial throat infection", ["bacterial throat infection", "throat infection", "bacterial pharyngitis", "throat ki infection"]),
+            ("upper respiratory tract infection", ["urti", "upper respiratory infection"]),
             ("essential hypertension", ["hypertension", "high bp", "blood pressure ki bimari"]),
             ("type 2 diabetes mellitus", ["type 2 diabetes", "diabetes", "sugar ki bimari", "diabetes mellitus"]),
             ("asthma", ["asthma", "dama"]),
-            ("gastroenteritis", ["gastroenteritis", "food poisoning", "pet ka infection"]),
+            ("gastroenteritis", ["gastroenteritis", "food poisoning", "pet ka infection", "vomiting aur loose motions", "vomiting and loose motions"]),
+            ("dehydration", ["dehydration", "severe dehydration", "paani ki kami"]),
+            ("gerd", ["acidity", "gerd", "acid reflux", "hyperacidity", "gastritis", "dyspepsia"]),
         ]
 
         # Common investigation keywords

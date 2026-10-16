@@ -181,11 +181,14 @@ def parse_fhir_summary(bundle_dict: dict[str, Any]) -> dict[str, Any]:
                 if m:
                     duration = m.group(1).strip()
 
-            is_diag = any(c.get("code") == "encounter-diagnosis" for c in category_codings)
+            is_diag = (
+                any(c.get("code") == "encounter-diagnosis" for c in category_codings)
+                or "condition-diag" in res.get("id", "").lower()
+            )
             item = {
                 "name": code_text,
                 "snomed_code": snomed_code or "386661006",
-                "duration": duration or "3",
+                "duration": duration or "3 days",
                 "confidence": "high conf" if is_diag else None,
                 "recorded_date": recorded_date,
                 "clinical_status": res.get("clinicalStatus", {}).get("coding", [{}])[0].get("code", "active"),
@@ -196,19 +199,35 @@ def parse_fhir_summary(bundle_dict: dict[str, Any]) -> dict[str, Any]:
                 symptoms.append(item)
 
         elif rtype == "MedicationRequest":
-            med_concept = res.get("medicationCodeableConcept", {})
-            med_name = med_concept.get("text") or "Medication"
-            rxnorm_code = None
-            if med_concept.get("coding"):
-                rxnorm_code = med_concept["coding"][0].get("code")
-                med_name = med_concept["coding"][0].get("display", med_name)
-
+            med_concept = (
+                res.get("medication", {}).get("concept")
+                or res.get("medicationCodeableConcept")
+                or {}
+            )
             dosage_instruction = res.get("dosageInstruction", [{}])[0]
             dosage_text = dosage_instruction.get("text", "")
 
+            # Exact prescribed drug name from audio transcript
+            med_name = med_concept.get("text")
+            rxnorm_code = None
+            if med_concept.get("coding"):
+                rxnorm_code = med_concept["coding"][0].get("code")
+                if not med_name:
+                    med_name = med_concept["coding"][0].get("display")
+
+            # Fallback if med_name is empty or generic 'Medication'
+            if not med_name or med_name.strip().lower() in ("medication", "other", "rx", "unknown"):
+                if dosage_text:
+                    med_name = dosage_text.split()[0].capitalize()
+                else:
+                    med_name = "Prescribed Medication"
+
+            if med_name.lower() == "ors":
+                med_name = "ORS"
+
             # Default values
             dosage = "500 mg"
-            frequency = "TDS"
+            frequency = "OD"
             duration = "3 days"
             status = res.get("status", "new")
 
@@ -217,10 +236,14 @@ def parse_fhir_summary(bundle_dict: dict[str, Any]) -> dict[str, Any]:
                 note_str = res["note"][0].get("text", "")
                 freq_m = re.search(r"Frequency:\s*([^;]+)", note_str)
                 if freq_m:
-                    frequency = freq_m.group(1).strip()
+                    val = freq_m.group(1).strip()
+                    if val and val.lower() != "none":
+                        frequency = val
                 dur_m = re.search(r"Duration:\s*([^;]+)", note_str)
                 if dur_m:
-                    duration = dur_m.group(1).strip()
+                    val = dur_m.group(1).strip()
+                    if val and val.lower() != "none":
+                        duration = val
                 stat_m = re.search(r"Status:\s*([^;]+)", note_str)
                 if stat_m:
                     status = stat_m.group(1).strip()
@@ -229,6 +252,23 @@ def parse_fhir_summary(bundle_dict: dict[str, Any]) -> dict[str, Any]:
             dose_m = re.search(r"(\d+\s*(?:mg|ml|tablet|goli|tab))", dosage_text, re.IGNORECASE)
             if dose_m:
                 dosage = dose_m.group(1)
+
+            # Frequency from dosage_text if still default
+            for f in ["TDS", "BD", "OD", "QID", "SOS"]:
+                if re.search(r"\b" + f + r"\b", dosage_text, re.IGNORECASE):
+                    frequency = f
+                    break
+            if "twice" in dosage_text.lower():
+                frequency = "BD"
+            elif "thrice" in dosage_text.lower() or "3 baar" in dosage_text.lower() or "3 times" in dosage_text.lower():
+                frequency = "TDS"
+            elif "once" in dosage_text.lower() or "1 baar" in dosage_text.lower():
+                frequency = "OD"
+
+            # Duration from dosage_text if still default
+            dur_m2 = re.search(r"(\d+\s*(?:days?|weeks?|months?))", dosage_text, re.IGNORECASE)
+            if dur_m2:
+                duration = dur_m2.group(1)
 
             medications.append({
                 "name": med_name,
@@ -258,6 +298,22 @@ def parse_fhir_summary(bundle_dict: dict[str, Any]) -> dict[str, Any]:
         elif rtype == "ServiceRequest":
             code_text = res.get("code", {}).get("text") or "Laboratory Order"
             investigations.append(code_text)
+
+    # Ensure provisional & final diagnosis is never empty
+    if not diagnoses and symptoms:
+        for i, sym in enumerate(symptoms):
+            if any(w in sym["name"].lower() for w in [
+                "infection", "fever", "dehydration", "acidity", "reflux", "gastritis",
+                "diarrhea", "pain", "cold", "dyspepsia"
+            ]):
+                promoted = symptoms.pop(i)
+                promoted["confidence"] = "provisional"
+                diagnoses.append(promoted)
+                break
+        if not diagnoses and symptoms:
+            promoted = symptoms.pop(0)
+            promoted["confidence"] = "provisional"
+            diagnoses.append(promoted)
 
     # Resource counts
     resource_counts = {}
